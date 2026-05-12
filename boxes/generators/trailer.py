@@ -246,7 +246,7 @@ class Trailer(Boxes):
             borders=tongue_borders,
             edge="e",
             callback=[lambda: self.hitchConnectorFeatures()],
-            move="up",
+            move="left",
             label="Hitch Tongue",
         )
 
@@ -261,9 +261,15 @@ class Trailer(Boxes):
             self.thickness + 2* self.HitchSecurerThickness, 90
         ]
         self.polygonWall(
+            borders=tongue_borders,
+            edge="e",
+            move="right only", # doesnt draw, oly moves cursor
+            label="",
+        )
+        self.polygonWall(
             borders=hitch_secure_borders,
             edge="e",
-            move="up",
+            move="",
             label="Hitch Securer",
         )
 
