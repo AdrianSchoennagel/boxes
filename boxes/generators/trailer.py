@@ -60,6 +60,15 @@ class Trailer(Boxes):
         self.argparser.add_argument("--LidArucoOffsetY", action="store", type=float, default=0.0, help="marker Y offset from lid center in mm")
 
         self.argparser.add_argument("--AxleDiameter", action="store", type=float, default=3.0, help="diameter of the axle hole in mm")
+        self.argparser.add_argument("--AddHitchJoint", action="store", type=boolarg, default=True, help="add hitch joint features and parts")
+        self.argparser.add_argument("--HitchLength", action="store", type=float, default=100.0, help="hitch connector length in mm. This is the distance from the front edge of the trailer to the center of the hitch pin hole.")
+        self.argparser.add_argument("--HitchWidth", action="store", type=float, default=10.0, help="hitch connector width in mm")
+        self.argparser.add_argument("--HitchPinDiameter", action="store", type=float, default=5.0, help="rear wall pin-hole diameter in mm")
+        self.argparser.add_argument("--HitchPinOffsetBottom", action="store", type=float, default=65.0, help="vertical offset of hitch pin/slot from bottom in mm")
+        self.argparser.add_argument("--HitchSlotClearance", action="store", type=float, default=0.3, help="extra clearance for front hitch slot in mm")
+        self.argparser.add_argument("--HitchLatchArmLength", action="store", type=float, default=10.0, help="length of hitch tongue inside trailer in mm")
+        self.argparser.add_argument("--HitchLatchNeckWidth", action="store", type=float, default=6.0, help="width of the neck of the hitch tongue (part inside trailer) in mm")
+        self.argparser.add_argument("--HitchSecurerThickness", action="store", type=float, default=5.0, help="extra thickness of the hitch securer in mm")
 
         # Project-specific fabrication defaults.
         self.argparser.set_defaults(burn=0.075)
@@ -100,6 +109,61 @@ class Trailer(Boxes):
         if self.AddFrontOpenings:
             self.openingHole(width)
         self.topFingerHoles(width)
+
+    def frontBottomFeatures(self, width):
+        """Apply front wall features including hitch slot."""
+        if not self.AddHitchJoint:
+            return
+
+        # Front rectungular hole for the tongue to pass through
+        slot_w = self.HitchWidth + self.HitchSlotClearance
+        slot_h = self.thickness + self.HitchSlotClearance
+        y_center = self.HitchPinOffsetBottom
+        self.rectangularHole(
+            width / 2.0,
+            y_center,
+            slot_w,
+            slot_h,
+            center_y=True,
+            center_x=True
+        )
+
+        # front rectungular hole for the tongue securer to lock into
+        securer_w = self.thickness
+        securer_h = 2 * self.HitchSecurerThickness + self.thickness
+        self.rectangularHole(
+            width / 2.0,
+            y_center,
+            securer_w,
+            securer_h,
+            center_y=True,
+            center_x=True
+        )
+
+    def backTopFeatures(self, width):
+        self.frontTopFeatures(width)
+
+    def backBottomFeatures(self, width):
+        """Apply back wall features including rear pin hole."""
+        if not self.AddHitchJoint:
+            return
+
+        # Rear cutout with a central pin rising from the bottom:
+        # top window + two lower side windows leave a center tongue (pin).
+        pin_w = self.HitchPinDiameter
+        pin_h = max(self.HitchPinDiameter * 1.4, self.thickness * 1.2)
+        outer_w = max(self.HitchWidth * 1.8, pin_w + 6.0)
+        side_w = max((outer_w - pin_w) / 2.0, 1.0)
+        top_h = self.thickness * 1.1
+
+        y_pin = self.HitchPinOffsetBottom
+        x_left = width / 2.0 - (pin_w / 2.0 + side_w / 2.0)
+        x_right = width / 2.0 + (pin_w / 2.0 + side_w / 2.0)
+        y_top = y_pin + pin_h
+
+        self.rectangularHole(x_left, y_pin, side_w, pin_h+0.01, center_y=False)
+        self.rectangularHole(x_right, y_pin, side_w, pin_h+0.01, center_y=False)
+        self.rectangularHole(width / 2.0, y_top, outer_w, top_h, center_y=False)
 
     def rearSideFootHole(self, width):
         """Place a round axle hole in the rear side foot."""
@@ -147,6 +211,62 @@ class Trailer(Boxes):
                 color=Color.ETCHING,
             )
 
+    def hitchConnectorFeatures(self):
+        """Add circular hole cutout to the hitch tongue."""
+        tip_margin = 0
+        self.hole(
+            self.HitchLatchArmLength + self.HitchLength - tip_margin,
+            self.HitchLatchNeckWidth + self.HitchWidth / 2.0,
+            d=self.HitchPinDiameter + self.HitchSlotClearance
+        )
+
+    def renderHitchParts(self):
+        """Render polygon hitch tongue and octagonal front guide plate."""
+        if not self.AddHitchJoint:
+            return
+
+        # Approximate a rounded right end with 3 chord segments (45 deg each).
+        end_chord = self.HitchWidth / (1 + 2*math.sin(math.radians(45)))
+
+        tongue_borders = [
+            self.HitchLatchArmLength, 90,
+            self.HitchLatchNeckWidth, -90,
+            self.HitchLength + self.thickness, 0,
+            end_chord/2, 45,
+            end_chord, 45,
+            end_chord, 45,
+            end_chord, 45,
+            end_chord/2, 0,
+            self.HitchLength + self.thickness, -90,
+            self.HitchLatchNeckWidth, 90,
+            self.HitchLatchArmLength, 90,
+            self.HitchWidth+2*self.HitchLatchNeckWidth, 90
+        ]
+        self.polygonWall(
+            borders=tongue_borders,
+            edge="e",
+            callback=[lambda: self.hitchConnectorFeatures()],
+            move="up",
+            label="Hitch Tongue",
+        )
+
+        hitch_secure_borders = [
+            self.HitchLatchArmLength + self.HitchSecurerThickness + self.thickness, 90,
+            self.HitchSecurerThickness, 90,
+            self.HitchLatchArmLength + self.thickness, -90,
+            self.thickness, -90,
+            self.HitchLatchArmLength + self.thickness, 90,
+            self.HitchSecurerThickness, 90,
+            self.HitchLatchArmLength + self.HitchSecurerThickness + self.thickness, 90,
+            self.thickness + 2* self.HitchSecurerThickness, 90
+        ]
+        self.polygonWall(
+            borders=hitch_secure_borders,
+            edge="e",
+            move="up",
+            label="Hitch Securer",
+        )
+
     def render(self):
         """Generate all parts: bottom, walls, optional lid, and feature cutouts."""
         l, b, h = self.x, self.y, self.h
@@ -179,7 +299,9 @@ class Trailer(Boxes):
         self.rectangularWall(l, h, sideEdges, callback=[lambda: self.rearSideFootHole(l), None, lambda: self.sideTopFeatures(l), None], ignore_widths=[1, 6], move="up", label="side1")
         self.rectangularWall(l, h, sideEdges, callback=[lambda: self.rearSideFootHole(l), None, lambda: self.sideTopFeatures(l), None], ignore_widths=[1, 6], move="up", label="side2")
 
-        # Front/back panels: top slot adds opening + lid finger holes.
-        self.rectangularWall(b, h, frontEdges, callback=[None, None, lambda: self.frontTopFeatures(b), None], ignore_widths=[1, 6], move="right", label="front")
-        self.rectangularWall(b, h, frontEdges, callback=[None, None, lambda: self.frontTopFeatures(b), None], ignore_widths=[1, 6], move="up", label="back")
+        # Front/back panels: top slot adds openings/finger holes; callbacks also add hitch features.
+        self.rectangularWall(b, h, frontEdges, callback=[lambda: self.frontBottomFeatures(b), None, lambda: self.frontTopFeatures(b), None], ignore_widths=[1, 6], move="right", label="front")
+        self.rectangularWall(b, h, frontEdges, callback=[lambda: self.backBottomFeatures(b), None, lambda: self.backTopFeatures(b), None], ignore_widths=[1, 6], move="up", label="back")
+
+        self.renderHitchParts()
 
