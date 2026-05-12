@@ -16,6 +16,7 @@ boxes.egg-info/
 documentation/src/generators.inc
 *.ipynb_checkpoints
 venv/
+.venv
 .vscode/
 tracker.log
 *.isorted
