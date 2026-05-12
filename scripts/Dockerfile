@@ -4,8 +4,9 @@ WORKDIR /app
 
 RUN python3 -m venv env
 RUN /app/env/bin/pip install gunicorn
+RUN /app/env/bin/pip install opencv-contrib-python-headless
 
-ADD https://github.com/florianfesti/boxes.git /app
+COPY . /app
 RUN /app/env/bin/pip install .
 RUN mv scripts/boxesserver scripts/boxesserver.py
 

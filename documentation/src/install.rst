@@ -21,6 +21,10 @@ Boxes.py need a set of Python modules:
 
 .. literalinclude:: ../../requirements.txt
 
+For generators that use ArUco marker etching, OpenCV with the ArUco module
+is required. This is provided by :code:`opencv-contrib-python-headless`
+in :code:`requirements.txt`.
+
 When using a distribution the packages will typically be name be :code:`python-MODULE` or :code:`python3-MODULE`
 
 pstoedit

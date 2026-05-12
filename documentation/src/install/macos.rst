@@ -31,7 +31,7 @@ General
 
    .. code::
 
-      pip3 install Markdown affine shapely qrcode
+   pip3 install Markdown affine shapely qrcode opencv-contrib-python-headless
 
 4. Download Boxes.py via Git:
 
