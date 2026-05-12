@@ -14,6 +14,7 @@
 #   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from boxes import *
+from boxes.aruco_factory import ARUCO_DICTIONARY_CHOICES, etch_aruco
 
 
 class Trailer(Boxes):
@@ -46,9 +47,15 @@ class Trailer(Boxes):
         self.argparser.add_argument("--AddLid", action="store", type=boolarg, default=True, help="add a lid panel")
         self.argparser.add_argument("--AddLidArucoEtching", action="store", type=boolarg, default=False, help="add an ArUco marker etching on the lid")
         self.argparser.add_argument("--LidArucoId", action="store", type=int, default=0, help="numeric ArUco marker id")
-        self.argparser.add_argument("--LidArucoDictionary", action="store", type=str, default="DICT_5X5_100", help="OpenCV ArUco dictionary name")
-        self.argparser.add_argument("--LidArucoSize", action="store", type=float, default=32.0, help="overall marker size on lid in mm")
-        self.argparser.add_argument("--LidArucoPixels", action="store", type=int, default=200, help="marker raster size used for ArUco sampling")
+        self.argparser.add_argument(
+            "--LidArucoDictionary",
+            action="store",
+            type=str,
+            choices=ARUCO_DICTIONARY_CHOICES,
+            default="DICT_5X5_100",
+            help="OpenCV ArUco dictionary name",
+        )
+        self.argparser.add_argument("--LidArucoSize", action="store", type=float, default=70.0, help="overall marker size on lid in mm")
         self.argparser.add_argument("--LidArucoOffsetX", action="store", type=float, default=0.0, help="marker X offset from lid center in mm")
         self.argparser.add_argument("--LidArucoOffsetY", action="store", type=float, default=0.0, help="marker Y offset from lid center in mm")
 
@@ -100,65 +107,45 @@ class Trailer(Boxes):
         d = self.AxleDiameter
         self.hole(width - (d+1), -stack.height / 1, d=d)
 
-    def _getArucoImage(self):
-        """Return official OpenCV ArUco marker image and cell count."""
-        try:
-            import cv2
-        except Exception as exc:
-            raise RuntimeError("AddLidArucoEtching requires OpenCV (opencv-contrib-python).") from exc
-
-        if not hasattr(cv2, "aruco"):
-            raise RuntimeError("OpenCV ArUco module is unavailable. Install opencv-contrib-python.")
-
-        dictionary_name = str(self.LidArucoDictionary).upper()
-        dictionary_id = getattr(cv2.aruco, dictionary_name, None)
-        if dictionary_id is None:
-            raise ValueError(f"Unknown ArUco dictionary: {self.LidArucoDictionary}")
-
-        dictionary = cv2.aruco.getPredefinedDictionary(dictionary_id)
-        marker_count = dictionary.bytesList.shape[0]
-        marker_id = int(self.LidArucoId) % marker_count
-        pixels = max(40, int(self.LidArucoPixels))
-        border_bits = 1
-        image = cv2.aruco.generateImageMarker(dictionary, marker_id, pixels, borderBits=border_bits)
-        cells = dictionary.markerSize + 2 * border_bits
-        return image, cells
-
-    def lidArucoEtching(self, lid_w, lid_h):
-        """Etch an official ArUco marker on the lid using annotation color geometry."""
-        if not (self.AddLid and self.AddLidArucoEtching):
+    def lidArucoFeatures(self, lid_w, lid_h):
+        """Etch ArUco marker and a small Arabic ID label beside it."""
+        if not self.AddLidArucoEtching:
             return
 
-        image, cells = self._getArucoImage()
-        requested_size = float(self.LidArucoSize)
-        size = min(requested_size, lid_w - 2.0, lid_h - 2.0)
-        if size <= 0:
+        etch_aruco(
+            self,
+            lid_w,
+            lid_h,
+            self.LidArucoDictionary,
+            self.LidArucoId,
+            self.LidArucoSize,
+            self.LidArucoOffsetX,
+            self.LidArucoOffsetY,
+            callback_edge_char="f",
+        )
+
+        marker_size = min(float(self.LidArucoSize), lid_w - 2.0, lid_h - 2.0)
+        if marker_size <= 0:
             return
+        ox = (lid_w - marker_size) / 2.0 + float(self.LidArucoOffsetX)
+        oy = (lid_h - marker_size) / 2.0 + float(self.LidArucoOffsetY)
+        label = str(int(self.LidArucoId))
+        label_fontsize = max(4.0, marker_size * 0.12)
+        label_gap = 2.0
+        # Text anchoring uses font-height heuristics; a small negative nudge centers it visually.
+        label_y_nudge = -0.15 * label_fontsize
 
-        module = size / cells
-        ox = (lid_w - size) / 2.0 + float(self.LidArucoOffsetX)
-        oy = (lid_h - size) / 2.0 + float(self.LidArucoOffsetY)
-
-        # Callback origin for edge 0 is shifted by edge startWidth; move back into panel space.
-        base_y = -(self.edges['f'].startWidth() + self.burn)
         with self.saved_context():
+            base_y = -(self.edges["f"].startWidth() + self.burn)
             self.moveTo(0, base_y)
-            for row in range(cells):
-                for col in range(cells):
-                    sample_row = cells - 1 - row
-                    py = int((sample_row + 0.5) * image.shape[0] / cells)
-                    px = int((col + 0.5) * image.shape[1] / cells)
-                    if image[py, px] < 128:
-                        self.rectangularHole(
-                            ox + col * module,
-                            oy + row * module,
-                            module,
-                            module,
-                            r=0,
-                            center_x=False,
-                            center_y=False,
-                            color=Color.ANNOTATIONS,
-                        )
+            self.text(
+                label,
+                x=ox + marker_size + label_gap,
+                y=oy + marker_size / 2.0 + label_y_nudge,
+                align="middle left",
+                fontsize=label_fontsize,
+                color=Color.ETCHING,
+            )
 
     def render(self):
         """Generate all parts: bottom, walls, optional lid, and feature cutouts."""
@@ -166,7 +153,19 @@ class Trailer(Boxes):
 
         self.rectangularWall(l, b, "ffff", move="up", label="Bottom")
         if self.AddLid:
-            self.rectangularWall(l, b, "ffff", callback=[lambda: self.lidArucoEtching(l, b), None, None, None], move="up", label="Lid")
+            self.rectangularWall(
+                l,
+                b,
+                "ffff",
+                callback=[
+                    lambda: self.lidArucoFeatures(l, b),
+                    None,
+                    None,
+                    None,
+                ],
+                move="up",
+                label="Lid",
+            )
 
         if self.MakeStackable:
             frontEdges = "sfSf"
