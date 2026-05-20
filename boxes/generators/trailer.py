@@ -218,7 +218,7 @@ class Trailer(Boxes):
         d = self.AxleDiameter
         self.hole(width - (d+1), -stack.height / 1, d=d)
 
-    def sideArucoFeatures(self, panel_w, panel_h):
+    def sideArucoFeatures(self, panel_w, panel_h, mirrored=False):
         """Etch an ArUco marker on the right side of a side panel, centered in height."""
         if not self.AddSideArucoEtching:
             return
@@ -226,6 +226,8 @@ class Trailer(Boxes):
         if size <= 0:
             return
         ox = panel_w / 2.0 - size / 2.0 - float(self.SideArucoMargin)
+        if mirrored:
+            ox = -ox
         etch_aruco(
             self,
             panel_w,
@@ -238,10 +240,10 @@ class Trailer(Boxes):
             callback_edge_char="s",
         )
 
-    def sideBottomFeatures(self, panel_w, panel_h):
+    def sideBottomFeatures(self, panel_w, panel_h, mirrored=False):
         """Apply side-panel bottom-edge features."""
         self.rearSideFootHole(panel_w)
-        self.sideArucoFeatures(panel_w, panel_h)
+        self.sideArucoFeatures(panel_w, panel_h, mirrored)
 
     def sideHingeSlots(self, width):
         """Cut hinge slots into the side top edge at the lid split."""
@@ -525,7 +527,7 @@ class Trailer(Boxes):
         # rectangularWall callback slots are ordered as [bottom, right, top, left].
         # Side panels: bottom slot adds rear axle hole, top slot adds opening + lid finger holes.
         self.rectangularWall(l, h, sideEdges, callback=[lambda: self.sideBottomFeatures(l, h), None, lambda: self.sideTopFeatures(l), None], ignore_widths=[1, 6], move="up", label="side1")
-        self.rectangularWall(l, h, sideEdges, callback=[lambda: self.sideBottomFeatures(l, h), None, lambda: self.sideTopFeatures(l), None], ignore_widths=[1, 6], move="mirror up", label="side2")
+        self.rectangularWall(l, h, sideEdges, callback=[lambda: self.sideBottomFeatures(l, h, mirrored=True), None, lambda: self.sideTopFeatures(l), None], ignore_widths=[1, 6], move="mirror up", label="side2")
 
         # Front/back panels: top slot adds openings/finger holes; callbacks also add hitch features.
         self.ctx.save()
