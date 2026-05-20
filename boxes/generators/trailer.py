@@ -159,7 +159,8 @@ class Trailer(Boxes):
         # Front rectungular hole for the tongue to pass through
         slot_w = self.HitchWidth + self.HitchSlotClearance
         slot_h = self.thickness + self.HitchSlotClearance
-        y_center = self.HitchPinOffsetBottom
+        stack = self.edges['s'].settings
+        y_center = self.HitchPinOffsetBottom - stack.height 
         self.rectangularHole(
             width / 2.0,
             y_center,
@@ -201,7 +202,8 @@ class Trailer(Boxes):
         side_w = max((outer_w - pin_w) / 2.0, 1.0)
         top_h = self.thickness * 1.1
 
-        y_pin = self.HitchPinOffsetBottom
+        stack = self.edges['s'].settings
+        y_pin = self.HitchPinOffsetBottom - stack.height - self.thickness / 2.0
         x_left = width / 2.0 - (pin_w / 2.0 + side_w / 2.0)
         x_right = width / 2.0 + (pin_w / 2.0 + side_w / 2.0)
         y_top = y_pin + pin_h
