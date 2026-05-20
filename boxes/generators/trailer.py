@@ -75,6 +75,21 @@ class Trailer(Boxes):
         lid_aruco_group.add_argument("--LidArucoOffsetX", action="store", type=float, default=0.0, help="marker X offset from lid center in mm")
         lid_aruco_group.add_argument("--LidArucoOffsetY", action="store", type=float, default=0.0, help="marker Y offset from lid center in mm")
 
+        side_aruco_group = self.argparser.add_argument_group("Side ArUco")
+        side_aruco_group.add_argument("--AddSideArucoEtching", action="store", type=boolarg, default=True, help="add an ArUco marker etching on both side panels")
+        side_aruco_group.add_argument("--SideArucoId", action="store", type=int, default=0, help="numeric side ArUco marker id")
+        side_aruco_group.add_argument(
+            "--SideArucoDictionary",
+            action="store",
+            type=str,
+            choices=ARUCO_DICTIONARY_CHOICES,
+            default="DICT_5X5_50",
+            help="OpenCV ArUco dictionary name for side marker",
+        )
+        side_aruco_group.add_argument("--SideArucoSize", action="store", type=float, default=30.0, help="overall marker size on side panel in mm")
+        side_aruco_group.add_argument("--SideArucoMargin", action="store", type=float, default=5.0, help="right margin for side marker in mm")
+        side_aruco_group.add_argument("--SideArucoOffsetY", action="store", type=float, default=20.0, help="marker Y offset from side panel center in mm")
+
         # Hitch joint parameters
         hitch_group = self.argparser.add_argument_group("Hitch")
         hitch_group.add_argument("--AddHitchJoint", action="store", type=boolarg, default=True, help="add hitch joint features and parts")
@@ -200,6 +215,31 @@ class Trailer(Boxes):
         stack = self.edges['s'].settings
         d = self.AxleDiameter
         self.hole(width - (d+1), -stack.height / 1, d=d)
+
+    def sideArucoFeatures(self, panel_w, panel_h):
+        """Etch an ArUco marker on the right side of a side panel, centered in height."""
+        if not self.AddSideArucoEtching:
+            return
+        size = min(float(self.SideArucoSize), panel_w - 2.0, panel_h - 2.0)
+        if size <= 0:
+            return
+        ox = panel_w / 2.0 - size / 2.0 - float(self.SideArucoMargin)
+        etch_aruco(
+            self,
+            panel_w,
+            panel_h,
+            self.SideArucoDictionary,
+            self.SideArucoId,
+            size,
+            offset_x=ox,
+            offset_y=self.SideArucoOffsetY,
+            callback_edge_char="s",
+        )
+
+    def sideBottomFeatures(self, panel_w, panel_h):
+        """Apply side-panel bottom-edge features."""
+        self.rearSideFootHole(panel_w)
+        self.sideArucoFeatures(panel_w, panel_h)
 
     def sideHingeSlots(self, width):
         """Cut hinge slots into the side top edge at the lid split."""
@@ -482,8 +522,8 @@ class Trailer(Boxes):
 
         # rectangularWall callback slots are ordered as [bottom, right, top, left].
         # Side panels: bottom slot adds rear axle hole, top slot adds opening + lid finger holes.
-        self.rectangularWall(l, h, sideEdges, callback=[lambda: self.rearSideFootHole(l), None, lambda: self.sideTopFeatures(l), None], ignore_widths=[1, 6], move="up", label="side1")
-        self.rectangularWall(l, h, sideEdges, callback=[lambda: self.rearSideFootHole(l), None, lambda: self.sideTopFeatures(l), None], ignore_widths=[1, 6], move="up", label="side2")
+        self.rectangularWall(l, h, sideEdges, callback=[lambda: self.sideBottomFeatures(l, h), None, lambda: self.sideTopFeatures(l), None], ignore_widths=[1, 6], move="up", label="side1")
+        self.rectangularWall(l, h, sideEdges, callback=[lambda: self.sideBottomFeatures(l, h), None, lambda: self.sideTopFeatures(l), None], ignore_widths=[1, 6], move="mirror up", label="side2")
 
         # Front/back panels: top slot adds openings/finger holes; callbacks also add hitch features.
         self.ctx.save()
@@ -492,7 +532,6 @@ class Trailer(Boxes):
         self.rectangularWall(b, h, backEdges, callback=[lambda: self.backBottomFeatures(b), None, lambda: self.backTopFeatures(b), None], ignore_widths=[1, 6], move="up", label="back")
         self.ctx.restore()
         self.rectangularWall(b, h, backEdges, move="only up", label="Move cursor up")
-
 
         self.renderChuteParts()
 
