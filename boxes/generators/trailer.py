@@ -229,18 +229,29 @@ class Trailer(Boxes):
         end_chord = self.HitchWidth / (1 + 2*math.sin(math.radians(45)))
 
         tongue_borders = [
+            # lower neck
             self.HitchLatchArmLength, 90,
             self.HitchLatchNeckWidth, -90,
+            # length
             self.HitchLength + self.thickness, 0,
+            # front rounded end
             end_chord/2, 45,
             end_chord, 45,
             end_chord, 45,
             end_chord, 45,
             end_chord/2, 0,
+            # length
             self.HitchLength + self.thickness, -90,
+            # upper neck
             self.HitchLatchNeckWidth, 90,
             self.HitchLatchArmLength, 90,
-            self.HitchWidth+2*self.HitchLatchNeckWidth, 90
+            # back with clip insert
+            self.HitchLatchNeckWidth + self.HitchWidth/2 - self.thickness/2 - self.burn, 90,
+            self.thickness, -90,
+            self.thickness, -90,
+            self.thickness, 90,
+            self.HitchLatchNeckWidth + self.HitchWidth/2 - self.thickness/2 - self.burn, 90,
+            #self.HitchWidth+2*self.HitchLatchNeckWidth, 90
         ]
         self.polygonWall(
             borders=tongue_borders,
@@ -251,13 +262,13 @@ class Trailer(Boxes):
         )
 
         hitch_secure_borders = [
-            self.HitchLatchArmLength + self.HitchSecurerThickness + self.thickness, 90,
+            self.HitchLatchArmLength + self.HitchSecurerThickness, 90,
             self.HitchSecurerThickness, 90,
-            self.HitchLatchArmLength + self.thickness, -90,
+            self.HitchLatchArmLength, -90,
             self.thickness, -90,
-            self.HitchLatchArmLength + self.thickness, 90,
+            self.HitchLatchArmLength, 90,
             self.HitchSecurerThickness, 90,
-            self.HitchLatchArmLength + self.HitchSecurerThickness + self.thickness, 90,
+            self.HitchLatchArmLength + self.HitchSecurerThickness, 90,
             self.thickness + 2* self.HitchSecurerThickness, 90
         ]
         self.polygonWall(
