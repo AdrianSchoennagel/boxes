@@ -36,15 +36,19 @@ class Trailer(Boxes):
 
         self.argparser.add_argument("--MakeStackable", action="store", type=boolarg, default=True, help="make crates stackable")
         # self.argparser.add_argument("--AddPatternMask", action="store", type=boolarg, default=False, help="add pattern mask")
-        self.argparser.add_argument("--AddLid", action="store", type=boolarg, default=True, help="add a lid panel")
         self.argparser.add_argument("--AxleDiameter", action="store", type=float, default=3.0, help="diameter of the axle hole in mm")
+
+        lid_group = self.argparser.add_argument_group("Lid")
+        lid_group.add_argument("--AddLid", action="store", type=boolarg, default=True, help="add a lid panel")
+        lid_group.add_argument("--SplitLid", action="store", type=boolarg, default=True, help="split lid into fixed rear and removable front")
+        lid_group.add_argument("--LidSplitRatio", action="store", type=float, default=0.5, help="rear lid length as a fraction of the total length")
 
         # Side openings
         side_openings_group = self.argparser.add_argument_group("Side openings")
         side_openings_group.add_argument("--AddSideOpenings", action="store", type=boolarg, default=True, help="add side openings")
         side_openings_group.add_argument("--AddFrontOpenings", action="store", type=boolarg, default=False, help="add front and back openings")
         side_openings_group.add_argument("--OpeningTopOffset", action="store", type=float, default=20.0, help="offset of the opening hole from top edge")
-        side_openings_group.add_argument("--OpeningSideOffset", action="store", type=float, default=15.0, help="offset of the opening hole from side edge")
+        side_openings_group.add_argument("--OpeningSideOffset", action="store", type=float, default=45.0, help="offset of the opening hole from side edge")
         side_openings_group.add_argument("--OpeningBottomOffset", action="store", type=float, default=20.0, help="offset of the opening hole from bottom edge")
         side_openings_group.add_argument("--OpeningRadius", action="store", type=float, default=5, help="opening hole radius")
 
@@ -97,24 +101,31 @@ class Trailer(Boxes):
         #     patterny = opening_y + patternHeight/2 if self.MakeStackable else hoffset + patternHeight/2
         #     self.rectangularHole(width/2, patterny, width - hoffset * 2, patternHeight, 0, color = Color.ANNOTATIONS)
 
-    def topFingerHoles(self, width):
+    def topFingerHoles(self, width, length=None, offset=0.0):
         """Add top finger-joint holes only when a matching lid is generated."""
         if not self.AddLid:
             return
+        if length is None:
+            length = width
         dist = self.fingerHolesAt.settings.edge_width
-        self.fingerHolesAt(0, self.burn + dist + self.thickness / 2, width, 0)
+        self.fingerHolesAt(offset, self.burn + dist + self.thickness / 2, length, 0)
 
     def sideTopFeatures(self, width):
         """Apply side-panel top-edge cutouts in callback order."""
         if self.AddSideOpenings:
             self.openingHole(width)
-        self.topFingerHoles(width)
+        if self.SplitLid:
+            self.sideHingeSlots(width)
+            self.topFingerHoles(width, length=self._lid_rear_len)
+        else:
+            self.topFingerHoles(width)
 
     def frontTopFeatures(self, width):
         """Apply front/back top-edge cutouts in callback order."""
         if self.AddFrontOpenings:
             self.openingHole(width)
-        self.topFingerHoles(width)
+        if not self.SplitLid:
+            self.topFingerHoles(width)
 
     def frontBottomFeatures(self, width):
         """Apply front wall features including hitch slot."""
@@ -147,7 +158,9 @@ class Trailer(Boxes):
         )
 
     def backTopFeatures(self, width):
-        self.frontTopFeatures(width)
+        if self.AddFrontOpenings:
+            self.openingHole(width)
+        self.topFingerHoles(width)
 
     def backBottomFeatures(self, width):
         """Apply back wall features including rear pin hole."""
@@ -176,6 +189,26 @@ class Trailer(Boxes):
         stack = self.edges['s'].settings
         d = self.AxleDiameter
         self.hole(width - (d+1), -stack.height / 1, d=d)
+
+    def sideHingeSlots(self, width):
+        """Cut hinge slots into the side top edge at the lid split."""
+        if self._lid_front_len <= 0:
+            return
+        settings = self.edges["i"].settings
+        t = self.thickness
+        hinge_axle = settings.axle
+        pinl = max((hinge_axle ** 2 - t ** 2), 0.0) ** 0.5 * settings.pinwidth
+        if settings.style == "outset":
+            r = 0.5 * hinge_axle
+            alpha = math.degrees(math.asin(0.5 * t / r))
+            pos = math.cos(math.radians(alpha)) * r
+        else:
+            pos = 0.5 * hinge_axle + settings.hingestrength
+        stack = self.edges["s"].settings
+        x = width - pos
+        y = self.burn + t / 2.0 + stack.holedistance
+        self.hole(x, y, d=hinge_axle)
+        self.rectangularHole(x, y, pinl, t)
 
     def lidArucoFeatures(self, lid_w, lid_h):
         """Etch ArUco marker and a small Arabic ID label beside it."""
@@ -295,27 +328,72 @@ class Trailer(Boxes):
         l, b, h = self.x, self.y, self.h
 
         self.rectangularWall(l, b, "ffff", move="up", label="Bottom")
+        self.ctx.save()
         if self.AddLid:
-            self.rectangularWall(
-                l,
-                b,
-                "ffff",
-                callback=[
-                    lambda: self.lidArucoFeatures(l, b),
-                    None,
-                    None,
-                    None,
-                ],
-                move="up",
-                label="Lid",
-            )
+            if self.SplitLid:
+                split_ratio = self.LidSplitRatio
+                if split_ratio <= 0.0 or split_ratio >= 1.0:
+                    split_ratio = 0.5
+                rear_len = l * split_ratio
+                front_len = l - rear_len
+                self._lid_rear_len = rear_len
+                self._lid_front_len = front_len
+
+                self.rectangularWall(
+                    front_len,
+                    b,
+                    ["I", "e", "J", "e"],
+                    move="right",
+                    label="Front Lid",
+                )
+                self.rectangularWall(
+                    rear_len,
+                    b,
+                    ["f", "f", "f", "e"],
+                    callback=[
+                        lambda: self.lidArucoFeatures(rear_len, b),
+                        None,
+                        None,
+                        None,
+                    ],
+                    move="up",
+                    label="Rear Lid",
+                )
+            else:
+                self._lid_rear_len = l
+                self._lid_front_len = 0.0
+                self.rectangularWall(
+                    l,
+                    b,
+                    "ffff",
+                    callback=[
+                        lambda: self.lidArucoFeatures(l, b),
+                        None,
+                        None,
+                        None,
+                    ],
+                    move="up",
+                    label="Lid",
+                )
+        else:
+            self._lid_rear_len = 0.0
+            self._lid_front_len = 0.0
+        self.ctx.restore()
+        self.rectangularWall(l, b, "ffff", move="only up", label="Move cursor up") 
 
         if self.MakeStackable:
             frontEdges = "sfSf"
             sideEdges = "sFSF"
+            frontEdgesNoTop = "sfef"
+            sideTopEdgeRear = "S"
         else:
             frontEdges = "sfef"
             sideEdges = "sFeF"
+            frontEdgesNoTop = "sfef"
+            sideTopEdgeRear = "e"
+
+        if self.SplitLid:
+            frontEdges = "sfSf" if self.MakeStackable else "sfef"
 
         # rectangularWall callback slots are ordered as [bottom, right, top, left].
         # Side panels: bottom slot adds rear axle hole, top slot adds opening + lid finger holes.
@@ -324,7 +402,8 @@ class Trailer(Boxes):
 
         # Front/back panels: top slot adds openings/finger holes; callbacks also add hitch features.
         self.rectangularWall(b, h, frontEdges, callback=[lambda: self.frontBottomFeatures(b), None, lambda: self.frontTopFeatures(b), None], ignore_widths=[1, 6], move="right", label="front")
-        self.rectangularWall(b, h, frontEdges, callback=[lambda: self.backBottomFeatures(b), None, lambda: self.backTopFeatures(b), None], ignore_widths=[1, 6], move="up", label="back")
+        backEdges = "sfSf" if (self.MakeStackable and not self.SplitLid) else ("sfSf" if self.MakeStackable else "sfef")
+        self.rectangularWall(b, h, backEdges, callback=[lambda: self.backBottomFeatures(b), None, lambda: self.backTopFeatures(b), None], ignore_widths=[1, 6], move="up", label="back")
 
         self.renderHitchParts()
 
