@@ -29,7 +29,7 @@ class Trailer(Boxes):
         Boxes.__init__(self)
 
         # Finger-joint and stackable-edge defaults for this generator.
-        self.addSettingsArgs(edges.FingerJointSettings, bottom_lip=1.0)
+        self.addSettingsArgs(edges.FingerJointSettings, bottom_lip=1.0, play=0.1)
         self.addSettingsArgs(edges.StackableSettings, bottom_stabilizers=0.0, top_stabilizers=0.0, height=3.0)
         # Default dimensions are treated as outside measurements.
         self.buildArgParser(x=260, y=130, h=110, outside=True)
