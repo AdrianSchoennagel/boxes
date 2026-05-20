@@ -34,41 +34,47 @@ class Trailer(Boxes):
         # Default dimensions are treated as outside measurements.
         self.buildArgParser(x=260, y=130, h=110, outside=True)
 
-        # Opening and assembly feature toggles.
-        self.argparser.add_argument("--AddSideOpenings", action="store", type=boolarg, default=True, help="add side openings")
-        self.argparser.add_argument("--AddFrontOpenings", action="store", type=boolarg, default=False, help="add front and back openings")
-        self.argparser.add_argument("--OpeningTopOffset", action="store", type=float, default=20.0, help="offset of the opening hole from top edge")
-        self.argparser.add_argument("--OpeningSideOffset", action="store", type=float, default=15.0, help="offset of the opening hole from side edge")
-        self.argparser.add_argument("--OpeningBottomOffset", action="store", type=float, default=20.0, help="offset of the opening hole from bottom edge")
-        self.argparser.add_argument("--OpeningRadius", action="store", type=float, default=5, help="opening hole radius")
         self.argparser.add_argument("--MakeStackable", action="store", type=boolarg, default=True, help="make crates stackable")
         # self.argparser.add_argument("--AddPatternMask", action="store", type=boolarg, default=False, help="add pattern mask")
-
         self.argparser.add_argument("--AddLid", action="store", type=boolarg, default=True, help="add a lid panel")
-        self.argparser.add_argument("--AddLidArucoEtching", action="store", type=boolarg, default=False, help="add an ArUco marker etching on the lid")
-        self.argparser.add_argument("--LidArucoId", action="store", type=int, default=0, help="numeric ArUco marker id")
-        self.argparser.add_argument(
+        self.argparser.add_argument("--AxleDiameter", action="store", type=float, default=3.0, help="diameter of the axle hole in mm")
+
+        # Side openings
+        side_openings_group = self.argparser.add_argument_group("Side openings")
+        side_openings_group.add_argument("--AddSideOpenings", action="store", type=boolarg, default=True, help="add side openings")
+        side_openings_group.add_argument("--AddFrontOpenings", action="store", type=boolarg, default=False, help="add front and back openings")
+        side_openings_group.add_argument("--OpeningTopOffset", action="store", type=float, default=20.0, help="offset of the opening hole from top edge")
+        side_openings_group.add_argument("--OpeningSideOffset", action="store", type=float, default=15.0, help="offset of the opening hole from side edge")
+        side_openings_group.add_argument("--OpeningBottomOffset", action="store", type=float, default=20.0, help="offset of the opening hole from bottom edge")
+        side_openings_group.add_argument("--OpeningRadius", action="store", type=float, default=5, help="opening hole radius")
+
+        # aruco marker for lid
+        lid_aruco_group = self.argparser.add_argument_group("Lid ArUco")
+        lid_aruco_group.add_argument("--AddLidArucoEtching", action="store", type=boolarg, default=True, help="add an ArUco marker etching on the lid")
+        lid_aruco_group.add_argument("--LidArucoId", action="store", type=int, default=0, help="numeric ArUco marker id")
+        lid_aruco_group.add_argument(
             "--LidArucoDictionary",
             action="store",
             type=str,
             choices=ARUCO_DICTIONARY_CHOICES,
-            default="DICT_5X5_100",
+            default="DICT_6X6_50",
             help="OpenCV ArUco dictionary name",
         )
-        self.argparser.add_argument("--LidArucoSize", action="store", type=float, default=70.0, help="overall marker size on lid in mm")
-        self.argparser.add_argument("--LidArucoOffsetX", action="store", type=float, default=0.0, help="marker X offset from lid center in mm")
-        self.argparser.add_argument("--LidArucoOffsetY", action="store", type=float, default=0.0, help="marker Y offset from lid center in mm")
+        lid_aruco_group.add_argument("--LidArucoSize", action="store", type=float, default=70.0, help="overall marker size on lid in mm")
+        lid_aruco_group.add_argument("--LidArucoOffsetX", action="store", type=float, default=0.0, help="marker X offset from lid center in mm")
+        lid_aruco_group.add_argument("--LidArucoOffsetY", action="store", type=float, default=0.0, help="marker Y offset from lid center in mm")
 
-        self.argparser.add_argument("--AxleDiameter", action="store", type=float, default=3.0, help="diameter of the axle hole in mm")
-        self.argparser.add_argument("--AddHitchJoint", action="store", type=boolarg, default=True, help="add hitch joint features and parts")
-        self.argparser.add_argument("--HitchLength", action="store", type=float, default=100.0, help="hitch connector length in mm. This is the distance from the front edge of the trailer to the center of the hitch pin hole.")
-        self.argparser.add_argument("--HitchWidth", action="store", type=float, default=10.0, help="hitch connector width in mm")
-        self.argparser.add_argument("--HitchPinDiameter", action="store", type=float, default=5.0, help="rear wall pin-hole diameter in mm")
-        self.argparser.add_argument("--HitchPinOffsetBottom", action="store", type=float, default=65.0, help="vertical offset of hitch pin/slot from bottom in mm")
-        self.argparser.add_argument("--HitchSlotClearance", action="store", type=float, default=0.3, help="extra clearance for front hitch slot in mm")
-        self.argparser.add_argument("--HitchLatchArmLength", action="store", type=float, default=10.0, help="length of hitch tongue inside trailer in mm")
-        self.argparser.add_argument("--HitchLatchNeckWidth", action="store", type=float, default=6.0, help="width of the neck of the hitch tongue (part inside trailer) in mm")
-        self.argparser.add_argument("--HitchSecurerThickness", action="store", type=float, default=5.0, help="extra thickness of the hitch securer in mm")
+        # Hitch joint parameters
+        hitch_group = self.argparser.add_argument_group("Hitch")
+        hitch_group.add_argument("--AddHitchJoint", action="store", type=boolarg, default=True, help="add hitch joint features and parts")
+        hitch_group.add_argument("--HitchLength", action="store", type=float, default=100.0, help="hitch connector length in mm. This is the distance from the front edge of the trailer to the center of the hitch pin hole.")
+        hitch_group.add_argument("--HitchWidth", action="store", type=float, default=10.0, help="hitch connector width in mm")
+        hitch_group.add_argument("--HitchPinDiameter", action="store", type=float, default=5.0, help="rear wall pin-hole diameter in mm")
+        hitch_group.add_argument("--HitchPinOffsetBottom", action="store", type=float, default=65.0, help="vertical offset of hitch pin/slot from bottom in mm")
+        hitch_group.add_argument("--HitchSlotClearance", action="store", type=float, default=0.3, help="extra clearance for front hitch slot in mm")
+        hitch_group.add_argument("--HitchLatchArmLength", action="store", type=float, default=10.0, help="length of hitch tongue inside trailer in mm")
+        hitch_group.add_argument("--HitchLatchNeckWidth", action="store", type=float, default=6.0, help="width of the neck of the hitch tongue (part inside trailer) in mm")
+        hitch_group.add_argument("--HitchSecurerThickness", action="store", type=float, default=5.0, help="extra thickness of the hitch securer in mm")
 
         # Project-specific fabrication defaults.
         self.argparser.set_defaults(burn=0.075)
