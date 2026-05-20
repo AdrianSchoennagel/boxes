@@ -16,6 +16,8 @@
 from boxes import *
 from boxes.aruco_factory import ARUCO_DICTIONARY_CHOICES, etch_aruco
 
+import numpy as np
+import math
 
 class Trailer(Boxes):
     """Trailer with Lid, optional side-openings, optional lid, axle hole, and hitch-joints."""
@@ -51,6 +53,11 @@ class Trailer(Boxes):
         side_openings_group.add_argument("--OpeningSideOffset", action="store", type=float, default=45.0, help="offset of the opening hole from side edge")
         side_openings_group.add_argument("--OpeningBottomOffset", action="store", type=float, default=20.0, help="offset of the opening hole from bottom edge")
         side_openings_group.add_argument("--OpeningRadius", action="store", type=float, default=5, help="opening hole radius")
+
+        chute_group = self.argparser.add_argument_group("Chutes")
+        chute_group.add_argument("--AddChutes", action="store", type=boolarg, default=True, help="add side chutes")
+        chute_group.add_argument("--ChuteSlopePercent", action="store", type=float, default=30.0, help="chute incline as rise/run percent")
+        chute_group.add_argument("--ChuteOutsideExtension", action="store", type=float, default=50.0, help="extra chute extension outside the side opening in mm")
 
         # aruco marker for lid
         lid_aruco_group = self.argparser.add_argument_group("Lid ArUco")
@@ -129,6 +136,8 @@ class Trailer(Boxes):
 
     def frontBottomFeatures(self, width):
         """Apply front wall features including hitch slot."""
+        if self.AddChutes:
+            self.chuteFingerHoles(width)
         if not self.AddHitchJoint:
             return
 
@@ -164,6 +173,8 @@ class Trailer(Boxes):
 
     def backBottomFeatures(self, width):
         """Apply back wall features including rear pin hole."""
+        if self.AddChutes:
+            self.chuteFingerHoles(width)
         if not self.AddHitchJoint:
             return
 
@@ -209,6 +220,73 @@ class Trailer(Boxes):
         y = self.burn + t / 2.0 + stack.holedistance
         self.hole(x, y, d=hinge_axle)
         self.rectangularHole(x, y, pinl, t)
+
+    def get_chute_length(self):
+        """Calculate the required chute length based on the opening size and chute slope."""
+        t = self.thickness
+        inner_width = self.y - 2 * t
+        if inner_width <= 0:
+            return 0.0
+        max_inside_depth = inner_width / 2.0
+        stack = self.edges['s'].settings
+        max_height = self.OpeningBottomOffset - t / 2.0 - t - stack.holedistance
+
+        slope = abs(self.ChuteSlopePercent) / 100.0
+        if slope <= 0.0:
+            return max_inside_depth
+        angle = math.atan(slope)
+
+        height = min(max_height, max_inside_depth * math.tan(angle))
+        depth = height / math.tan(angle)
+
+        return math.sqrt(height ** 2 + depth ** 2)
+
+    def renderChuteParts(self):
+        """Render chute panels and optional supports."""
+        if not self.AddChutes:
+            return
+        t = self.thickness
+        inner_width = self.y - 2 * t
+        if inner_width <= 0:
+            return
+        outside_extension = max(0.0, self.ChuteOutsideExtension)
+        inside_depth = self.get_chute_length()
+
+        tab_width = max(0.0, self.x - 2 * self.OpeningSideOffset)
+        if tab_width <= 0.0:
+            return
+        side_offset = (self.x - tab_width) / 2.0
+
+        borders = [
+            self.x, 90,
+            inside_depth, 90,
+            side_offset, -90,
+            outside_extension, 90,
+            tab_width, 90,
+            outside_extension, -90,
+            side_offset, 90,
+            inside_depth, 90,
+        ]
+        chute_edges = ["e", "f", "e", "e", "e", "e", "e", "f"]
+
+        self.polygonWall(borders, edge=chute_edges, move="up", label="Chute Left")
+        self.polygonWall(borders, edge=chute_edges, move="up", label="Chute Right")
+
+    def chuteFingerHoles(self, width):
+        """Add finger holes for the chute on front/back panels."""
+        t = self.thickness
+        inner_width = width - 2 * t
+        if inner_width <= 0:
+            return        
+        inside_depth = self.get_chute_length()
+
+        stackEdge = self.edges['s'].settings
+        offsetForStacking = stackEdge.height if self.MakeStackable else 0
+        stack = self.edges['s'].settings
+        max_height = self.OpeningBottomOffset - t / 2.0 - t - stack.holedistance
+        y = self.OpeningBottomOffset + t / 2.0 + t + stack.holedistance  # + offsetForStacking
+        self.fingerHolesAt(0, y, inside_depth, -self.ChuteSlopePercent)
+        self.fingerHolesAt(width, y, inside_depth, 180+self.ChuteSlopePercent)
 
     def lidArucoFeatures(self, lid_w, lid_h):
         """Etch ArUco marker and a small Arabic ID label beside it."""
@@ -264,6 +342,7 @@ class Trailer(Boxes):
         if not self.AddHitchJoint:
             return
 
+        self.ctx.save()
         # Approximate a rounded right end with 3 chord segments (45 deg each).
         end_chord = self.HitchWidth / (1 + 2*math.sin(math.radians(45)))
 
@@ -296,7 +375,7 @@ class Trailer(Boxes):
             borders=tongue_borders,
             edge="e",
             callback=[lambda: self.hitchConnectorFeatures()],
-            move="left",
+            move="right",
             label="Hitch Tongue",
         )
 
@@ -311,23 +390,22 @@ class Trailer(Boxes):
             self.thickness + 2* self.HitchSecurerThickness, 90
         ]
         self.polygonWall(
-            borders=tongue_borders,
-            edge="e",
-            move="right only", # doesnt draw, oly moves cursor
-            label="",
-        )
-        self.polygonWall(
             borders=hitch_secure_borders,
             edge="e",
-            move="",
+            move="up",
             label="Hitch Securer",
         )
 
-    def render(self):
-        """Generate all parts: bottom, walls, optional lid, and feature cutouts."""
-        l, b, h = self.x, self.y, self.h
+        self.ctx.restore()
+        self.polygonWall(
+            borders=tongue_borders,
+            edge="e",
+            move="up only",
+            label="Move cursor up",
+        )
 
-        self.rectangularWall(l, b, "ffff", move="up", label="Bottom")
+    def renderLidParts(self, l, b):
+        """Render the lid panel if enabled."""
         self.ctx.save()
         if self.AddLid:
             if self.SplitLid:
@@ -381,6 +459,13 @@ class Trailer(Boxes):
         self.ctx.restore()
         self.rectangularWall(l, b, "ffff", move="only up", label="Move cursor up") 
 
+    def render(self):
+        """Generate all parts: bottom, walls, optional lid, and feature cutouts."""
+        l, b, h = self.x, self.y, self.h
+
+        self.rectangularWall(l, b, "ffff", move="up", label="Bottom")
+        self.renderLidParts(l, b)
+
         if self.MakeStackable:
             frontEdges = "sfSf"
             sideEdges = "sFSF"
@@ -401,9 +486,15 @@ class Trailer(Boxes):
         self.rectangularWall(l, h, sideEdges, callback=[lambda: self.rearSideFootHole(l), None, lambda: self.sideTopFeatures(l), None], ignore_widths=[1, 6], move="up", label="side2")
 
         # Front/back panels: top slot adds openings/finger holes; callbacks also add hitch features.
+        self.ctx.save()
         self.rectangularWall(b, h, frontEdges, callback=[lambda: self.frontBottomFeatures(b), None, lambda: self.frontTopFeatures(b), None], ignore_widths=[1, 6], move="right", label="front")
         backEdges = "sfSf" if (self.MakeStackable and not self.SplitLid) else ("sfSf" if self.MakeStackable else "sfef")
         self.rectangularWall(b, h, backEdges, callback=[lambda: self.backBottomFeatures(b), None, lambda: self.backTopFeatures(b), None], ignore_widths=[1, 6], move="up", label="back")
+        self.ctx.restore()
+        self.rectangularWall(b, h, backEdges, move="only up", label="Move cursor up")
+
+
+        self.renderChuteParts()
 
         self.renderHitchParts()
 
