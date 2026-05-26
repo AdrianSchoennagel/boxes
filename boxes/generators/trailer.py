@@ -31,14 +31,14 @@ class Trailer(Boxes):
         Boxes.__init__(self)
 
         # Finger-joint and stackable-edge defaults for this generator.
-        self.addSettingsArgs(edges.FingerJointSettings, bottom_lip=1.0, play=0.1)
+        self.addSettingsArgs(edges.FingerJointSettings, bottom_lip=1.0, play=0.05)
         self.addSettingsArgs(edges.StackableSettings, bottom_stabilizers=0.0, top_stabilizers=0.0, height=3.0)
         # Default dimensions are treated as outside measurements.
         self.buildArgParser(x=260, y=130, h=110, outside=True)
 
         self.argparser.add_argument("--MakeStackable", action="store", type=boolarg, default=True, help="make crates stackable")
         # self.argparser.add_argument("--AddPatternMask", action="store", type=boolarg, default=False, help="add pattern mask")
-        self.argparser.add_argument("--AxleDiameter", action="store", type=float, default=3.0, help="diameter of the axle hole in mm")
+        self.argparser.add_argument("--AxleDiameter", action="store", type=float, default=4.5, help="diameter of the axle hole in mm")
 
         lid_group = self.argparser.add_argument_group("Lid")
         lid_group.add_argument("--AddLid", action="store", type=boolarg, default=True, help="add a lid panel")
@@ -58,6 +58,7 @@ class Trailer(Boxes):
         chute_group.add_argument("--AddChutes", action="store", type=boolarg, default=True, help="add side chutes")
         chute_group.add_argument("--ChuteSlopePercent", action="store", type=float, default=30.0, help="chute incline as rise/run percent")
         chute_group.add_argument("--ChuteOutsideExtension", action="store", type=float, default=50.0, help="extra chute extension outside the side opening in mm")
+        chute_group.add_argument("--ChutePlay", action="store", type=float, default=2.0, help="Amount of total play (left+right) between chute and side opening in mm.")
 
         # aruco marker for lid
         lid_aruco_group = self.argparser.add_argument_group("Lid ArUco")
@@ -93,9 +94,10 @@ class Trailer(Boxes):
         # Hitch joint parameters
         hitch_group = self.argparser.add_argument_group("Hitch")
         hitch_group.add_argument("--AddHitchJoint", action="store", type=boolarg, default=True, help="add hitch joint features and parts")
-        hitch_group.add_argument("--HitchLength", action="store", type=float, default=100.0, help="hitch connector length in mm. This is the distance from the front edge of the trailer to the center of the hitch pin hole.")
-        hitch_group.add_argument("--HitchWidth", action="store", type=float, default=10.0, help="hitch connector width in mm")
-        hitch_group.add_argument("--HitchPinDiameter", action="store", type=float, default=5.0, help="rear wall pin-hole diameter in mm")
+        hitch_group.add_argument("--HitchLength", action="store", type=float, default=110.0, help="hitch connector length in mm. This is the distance from the front edge of the trailer to the center of the hitch pin hole.")
+        hitch_group.add_argument("--HitchWidth", action="store", type=float, default=13.0, help="hitch connector width in mm")
+        hitch_group.add_argument("--HitchPinDiameter", action="store", type=float, default=7.5, help="rear wall pin-hole diameter in mm")
+        hitch_group.add_argument("--RearHitchPinThickness", action="store", type=float, default=5.0, help="thickness of the rear hitch pin in mm. This is the part that rises from the back wall and fits into the hole on the hitch tongue.")
         hitch_group.add_argument("--HitchPinOffsetBottom", action="store", type=float, default=65.0, help="vertical offset of hitch pin/slot from bottom in mm")
         hitch_group.add_argument("--HitchSlotClearance", action="store", type=float, default=0.3, help="extra clearance for front hitch slot in mm")
         hitch_group.add_argument("--HitchLatchArmLength", action="store", type=float, default=10.0, help="length of hitch tongue inside trailer in mm")
@@ -114,9 +116,20 @@ class Trailer(Boxes):
         hoffset = self.OpeningTopOffset
         hw = width - self.OpeningSideOffset * 2
         hh = self.h - self.OpeningTopOffset - self.OpeningBottomOffset
-        hr = self.OpeningRadius
+        hr = min(self.OpeningRadius, hw / 2.0, hh / 2.0)
         opening_y = hh/2 + hoffset - offsetForStacking
-        self.rectangularHole(width/2, opening_y, hw, hh, hr)
+
+        if self.AddChutes and hr > 0 and hh > hr:
+            # With chutes, keep the upper opening square while preserving rounded bottom corners.
+            upper_h = hh - hr
+            lower_h = min(2.0 * hr, hh)
+            upper_y = opening_y + hr / 2.0
+            lower_y = opening_y - hh / 2.0 + hr
+
+            self.rectangularHole(width/2, upper_y, hw, upper_h, 0)
+            self.rectangularHole(width/2, lower_y, hw, lower_h, hr)
+        else:
+            self.rectangularHole(width/2, opening_y, hw, hh, hr)
         # if self.AddPatternMask:
         #     self.rectangularHole(width/2, opening_y, hw + hoffset * 2, hh + hoffset * 2, hr + hoffset, color = Color.ANNOTATIONS)
         #     patternHeight = self.h - hoffset * 2
@@ -160,7 +173,7 @@ class Trailer(Boxes):
         slot_w = self.HitchWidth + self.HitchSlotClearance
         slot_h = self.thickness + self.HitchSlotClearance
         stack = self.edges['s'].settings
-        y_center = self.HitchPinOffsetBottom - stack.height 
+        y_center = self.HitchPinOffsetBottom - stack.height
         self.rectangularHole(
             width / 2.0,
             y_center,
@@ -196,7 +209,7 @@ class Trailer(Boxes):
 
         # Rear cutout with a central pin rising from the bottom:
         # top window + two lower side windows leave a center tongue (pin).
-        pin_w = self.HitchPinDiameter
+        pin_w = self.RearHitchPinThickness
         pin_h = max(self.HitchPinDiameter * 1.4, self.thickness * 1.2)
         outer_w = max(self.HitchWidth * 1.8, pin_w + 6.0)
         side_w = max((outer_w - pin_w) / 2.0, 1.0)
@@ -296,7 +309,7 @@ class Trailer(Boxes):
         outside_extension = max(0.0, self.ChuteOutsideExtension)
         inside_depth = self.get_chute_length()
 
-        tab_width = max(0.0, self.x - 2 * self.OpeningSideOffset)
+        tab_width = max(0.0, self.x - 2 * self.OpeningSideOffset - self.ChutePlay)
         if tab_width <= 0.0:
             return
         side_offset = (self.x - tab_width) / 2.0
@@ -321,7 +334,7 @@ class Trailer(Boxes):
         t = self.thickness
         inner_width = width - 2 * t
         if inner_width <= 0:
-            return        
+            return
         inside_depth = self.get_chute_length()
 
         stackEdge = self.edges['s'].settings
@@ -457,7 +470,7 @@ class Trailer(Boxes):
                 if split_ratio <= 0.0 or split_ratio >= 1.0:
                     split_ratio = 0.5
                 rear_len = l * split_ratio
-                front_len = l - rear_len
+                front_len = l - rear_len + self.thickness  # add thickness to front lid to ensure overlap such that front lid can rest on rear lid when closed
                 self._lid_rear_len = rear_len
                 self._lid_front_len = front_len
 
@@ -501,7 +514,7 @@ class Trailer(Boxes):
             self._lid_rear_len = 0.0
             self._lid_front_len = 0.0
         self.ctx.restore()
-        self.rectangularWall(l, b, "ffff", move="only up", label="Move cursor up") 
+        self.rectangularWall(l, b, "ffff", move="only up", label="Move cursor up")
 
     def render(self):
         """Generate all parts: bottom, walls, optional lid, and feature cutouts."""
