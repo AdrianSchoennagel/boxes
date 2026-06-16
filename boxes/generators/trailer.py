@@ -15,6 +15,7 @@
 
 from boxes import *
 from boxes.aruco_factory import ARUCO_DICTIONARY_CHOICES, etch_aruco
+from boxes.svg_logo_factory import etch_svg_logo
 
 import numpy as np
 import math
@@ -91,6 +92,14 @@ class Trailer(Boxes):
         side_aruco_group.add_argument("--SideArucoSize", action="store", type=float, default=30.0, help="overall marker size on side panel in mm")
         side_aruco_group.add_argument("--SideArucoMargin", action="store", type=float, default=5.0, help="right margin for side marker in mm")
         side_aruco_group.add_argument("--SideArucoOffsetY", action="store", type=float, default=20.0, help="marker Y offset from side panel center in mm")
+
+        side_logo_group = self.argparser.add_argument_group("Side Logo")
+        side_logo_group.add_argument("--AddSideLogoEtching", action="store", type=boolarg, default=False, help="add an SVG logo etching on both side panels")
+        side_logo_group.add_argument("--SideLogoSvgPath", action="store", type=str, default="/mnt/c/Users/schoennagel/Pictures/logo-ivi.svg", help="path to an SVG logo file")
+        side_logo_group.add_argument("--SideLogoMaxWidth", action="store", type=float, default=70.0, help="max logo width in mm")
+        side_logo_group.add_argument("--SideLogoMaxHeight", action="store", type=float, default=30.0, help="max logo height in mm")
+        side_logo_group.add_argument("--SideLogoOffsetX", action="store", type=float, default=0.0, help="logo X offset from side panel center in mm")
+        side_logo_group.add_argument("--SideLogoOffsetY", action="store", type=float, default=20.0, help="logo Y offset inside bottom zone in mm")
 
         # Hitch joint parameters
         hitch_group = self.argparser.add_argument_group("Hitch")
@@ -260,6 +269,41 @@ class Trailer(Boxes):
         """Apply side-panel bottom-edge features."""
         self.rearSideFootHole(panel_w)
         self.sideArucoFeatures(panel_w, panel_h, mirrored)
+        self.sideLogoFeatures(panel_w, panel_h, mirrored)
+
+    def sideLogoFeatures(self, panel_w, panel_h, mirrored=False):
+        """Etch an SVG logo on side panels below the opening cutout."""
+        if not self.AddSideLogoEtching:
+            return
+        if not self.SideLogoSvgPath:
+            return
+
+        stack = self.edges["s"].settings
+        offset_for_stacking = stack.height if self.MakeStackable else 0.0
+        bottom_zone_h = self.OpeningBottomOffset# - offset_for_stacking
+        if bottom_zone_h <= 2.0:
+            return
+
+        logo_w = min(float(self.SideLogoMaxWidth), panel_w - 4.0)
+        logo_h = min(float(self.SideLogoMaxHeight), bottom_zone_h - 2.0)
+        if logo_w <= 0.0 or logo_h <= 0.0:
+            return
+
+        center_x = panel_w / 2.0 + float(self.SideLogoOffsetX)
+        center_y = bottom_zone_h / 2.0 + float(self.SideLogoOffsetY)
+
+        etch_svg_logo(
+            self,
+            panel_w,
+            panel_h,
+            self.SideLogoSvgPath,
+            logo_w,
+            logo_h,
+            center_x,
+            center_y,
+            callback_edge_char="s",
+            mirrored=mirrored,
+        )
 
     def sideHingeSlots(self, width):
         """Cut hinge slots into the side top edge at the lid split."""
