@@ -31,7 +31,7 @@ class Trailer(Boxes):
         Boxes.__init__(self)
 
         # Finger-joint and stackable-edge defaults for this generator.
-        self.addSettingsArgs(edges.FingerJointSettings, bottom_lip=1.0, play=0.05)
+        self.addSettingsArgs(edges.FingerJointSettings, bottom_lip=0.0, play=0.05)
         self.addSettingsArgs(edges.StackableSettings, bottom_stabilizers=0.0, top_stabilizers=0.0, height=3.0)
         # Default dimensions are treated as outside measurements.
         self.buildArgParser(x=260, y=130, h=110, outside=True)
@@ -55,7 +55,8 @@ class Trailer(Boxes):
         side_openings_group.add_argument("--OpeningRadius", action="store", type=float, default=5, help="opening hole radius")
 
         chute_group = self.argparser.add_argument_group("Chutes")
-        chute_group.add_argument("--AddChutes", action="store", type=boolarg, default=True, help="add side chutes")
+        chute_group.add_argument("--AddChutes", action="store", type=boolarg, default=False, help="add side chutes")
+        chute_group.add_argument("--AddChuteFingerHoles", action="store", type=boolarg, default=True, help="add finger holes for chute panels on front/back walls")
         chute_group.add_argument("--ChuteSlopePercent", action="store", type=float, default=30.0, help="chute incline as rise/run percent")
         chute_group.add_argument("--ChuteOutsideExtension", action="store", type=float, default=50.0, help="extra chute extension outside the side opening in mm")
         chute_group.add_argument("--ChutePlay", action="store", type=float, default=2.0, help="Amount of total play (left+right) between chute and side opening in mm.")
@@ -98,6 +99,8 @@ class Trailer(Boxes):
         hitch_group.add_argument("--HitchWidth", action="store", type=float, default=13.0, help="hitch connector width in mm")
         hitch_group.add_argument("--HitchPinDiameter", action="store", type=float, default=7.5, help="rear wall pin-hole diameter in mm")
         hitch_group.add_argument("--RearHitchPinThickness", action="store", type=float, default=5.0, help="thickness of the rear hitch pin in mm. This is the part that rises from the back wall and fits into the hole on the hitch tongue.")
+        hitch_group.add_argument("--RearHitchClearance", action="store", type=float, default=9.0, help="extra clearance for inserting the hitch tongue onto the pin in the rear wall in mm")
+        hitch_group.add_argument("--RearHitchPinHeight", action="store", type=float, default=8.0, help="height of the rear hitch pin rising from the back wall in mm")
         hitch_group.add_argument("--HitchPinOffsetBottom", action="store", type=float, default=65.0, help="vertical offset of hitch pin/slot from bottom in mm")
         hitch_group.add_argument("--HitchSlotClearance", action="store", type=float, default=0.3, help="extra clearance for front hitch slot in mm")
         hitch_group.add_argument("--HitchLatchArmLength", action="store", type=float, default=10.0, help="length of hitch tongue inside trailer in mm")
@@ -119,7 +122,7 @@ class Trailer(Boxes):
         hr = min(self.OpeningRadius, hw / 2.0, hh / 2.0)
         opening_y = hh/2 + hoffset - offsetForStacking
 
-        if self.AddChutes and hr > 0 and hh > hr:
+        if (self.AddChutes or self.AddChuteFingerHoles) and hr > 0 and hh > hr:
             # With chutes, keep the upper opening square while preserving rounded bottom corners.
             upper_h = hh - hr
             lower_h = min(2.0 * hr, hh)
@@ -164,7 +167,7 @@ class Trailer(Boxes):
 
     def frontBottomFeatures(self, width):
         """Apply front wall features including hitch slot."""
-        if self.AddChutes:
+        if self.AddChutes or self.AddChuteFingerHoles:
             self.chuteFingerHoles(width)
         if not self.AddHitchJoint:
             return
@@ -202,7 +205,7 @@ class Trailer(Boxes):
 
     def backBottomFeatures(self, width):
         """Apply back wall features including rear pin hole."""
-        if self.AddChutes:
+        if self.AddChutes or self.AddChuteFingerHoles:
             self.chuteFingerHoles(width)
         if not self.AddHitchJoint:
             return
@@ -210,10 +213,10 @@ class Trailer(Boxes):
         # Rear cutout with a central pin rising from the bottom:
         # top window + two lower side windows leave a center tongue (pin).
         pin_w = self.RearHitchPinThickness
-        pin_h = max(self.HitchPinDiameter * 1.4, self.thickness * 1.2)
+        pin_h = self.RearHitchPinHeight
         outer_w = max(self.HitchWidth * 1.8, pin_w + 6.0)
         side_w = max((outer_w - pin_w) / 2.0, 1.0)
-        top_h = self.thickness * 1.1
+        top_h = self.RearHitchClearance
 
         stack = self.edges['s'].settings
         y_pin = self.HitchPinOffsetBottom - stack.height - self.thickness / 2.0
@@ -437,14 +440,18 @@ class Trailer(Boxes):
         )
 
         hitch_secure_borders = [
-            self.HitchLatchArmLength + self.HitchSecurerThickness, 90,
+            self.HitchLatchArmLength + self.HitchSecurerThickness - self.thickness, 90,
+            self.thickness, -90,
+            self.thickness, 90,
             self.HitchSecurerThickness, 90,
             self.HitchLatchArmLength, -90,
             self.thickness, -90,
             self.HitchLatchArmLength, 90,
             self.HitchSecurerThickness, 90,
-            self.HitchLatchArmLength + self.HitchSecurerThickness, 90,
-            self.thickness + 2* self.HitchSecurerThickness, 90
+            self.thickness, -90,
+            self.thickness, 90,
+            self.HitchLatchArmLength + self.HitchSecurerThickness - self.thickness, 90,
+            self.thickness + 2* self.HitchSecurerThickness + 2* self.thickness, 90
         ]
         self.polygonWall(
             borders=hitch_secure_borders,
@@ -524,13 +531,13 @@ class Trailer(Boxes):
         self.renderLidParts(l, b)
 
         if self.MakeStackable:
-            frontEdges = "sfSf"
-            sideEdges = "sFSF"
+            frontEdges = "sFSF"
+            sideEdges = "shSh"
             frontEdgesNoTop = "sfef"
             sideTopEdgeRear = "S"
         else:
-            frontEdges = "sfef"
-            sideEdges = "sFeF"
+            frontEdges = "sFeF"
+            sideEdges = "sheh"
             frontEdgesNoTop = "sfef"
             sideTopEdgeRear = "e"
 
