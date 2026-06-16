@@ -17,5 +17,6 @@ services:
       - /app/env
       - /app/scripts
       - ./:/app
+      - /mnt/c/Users/schoennagel/Pictures:/mnt/c/Users/schoennagel/Pictures:ro
     ports:
       - 4455:8000
