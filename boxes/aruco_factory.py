@@ -85,6 +85,7 @@ def etch_aruco(
     offset_x: float = 0.0,
     offset_y: float = 0.0,
     callback_edge_char: str | None = None,
+    unmirror_x: bool = False,
 ) -> None:
     """Generate and etch an ArUco marker on a panel in one call.
 
@@ -102,6 +103,9 @@ def etch_aruco(
         offset_x: Marker X offset from panel center in mm (default 0).
         offset_y: Marker Y offset from panel center in mm (default 0).
         callback_edge_char: Optional edge character for callback coordinate correction.
+        unmirror_x: When True, applies an additional local x-mirror around the
+            marker center. Useful on mirrored panel contexts where marker
+            content should stay unmirrored.
     """
     image, cells = _get_aruco_image(dictionary_name, marker_id)
     size = min(float(marker_size), panel_w - 2.0, panel_h - 2.0)
@@ -117,6 +121,11 @@ def etch_aruco(
             base_y = -(box.edges[callback_edge_char].startWidth() + box.burn)
             box.moveTo(0, base_y)
         box.set_source_color(Color.ETCHING)
+        if unmirror_x:
+            cx = ox + 0.5 * size
+            box.ctx.translate(cx, 0)
+            box.ctx.scale(-1, 1)
+            box.ctx.translate(-cx, 0)
         _draw_aruco_marker(box.ctx, image, cells, ox, oy, size)
         # Restore default drawing color expected by most generators.
         box.set_source_color(Color.BLACK)
