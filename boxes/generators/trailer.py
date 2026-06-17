@@ -81,7 +81,7 @@ class Trailer(Boxes):
         lid_logo_group = self.argparser.add_argument_group("Front Lid Logos")
         lid_logo_group.add_argument("--AddFrontLidLogos", action="store", type=boolarg, default=True, help="add stacked logos on the front split-lid half")
         lid_logo_group.add_argument("--FrontLidLogoSvgPath1", action="store", type=str, default="/mnt/c/Users/schoennagel/Pictures/logo-ivi.svg", help="path to SVG logo for front lid")
-        lid_logo_group.add_argument("--FrontLidLogoSvgPath2", action="store", type=str, default="/mnt/c/Users/schoennagel/Pictures/logo-swarmlab-flat3.svg", help="path to SVG logo for front lid")
+        lid_logo_group.add_argument("--FrontLidLogoSvgPath2", action="store", type=str, default="/mnt/c/Users/schoennagel/Pictures/logo-swarmlab-flat.svg", help="path to SVG logo for front lid")
         lid_logo_group.add_argument("--FrontLidLogoSvgPath3", action="store", type=str, default="/mnt/c/Users/schoennagel/Pictures/logo-ovgu-FIN.svg", help="path to SVG logo for front lid")
         lid_logo_group.add_argument("--FrontLidLogoCount", action="store", type=int, default=3, help="number of stacked logos on front lid")
         lid_logo_group.add_argument("--FrontLidLogoMaxWidth", action="store", type=float, default=80.0, help="max width of each front-lid logo in mm")
