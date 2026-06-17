@@ -277,7 +277,34 @@ class Trailer(Boxes):
             offset_x=ox,
             offset_y=self.SideArucoOffsetY,
             callback_edge_char="s",
+            unmirror_x=mirrored,
         )
+
+        # Match lid behavior by adding the marker ID near the marker.
+        ox_abs = (panel_w - size) / 2.0 + ox
+        oy = (panel_h - size) / 2.0 + float(self.SideArucoOffsetY)
+        label = str(int(self.SideArucoId))
+        label_fontsize = max(3.5, size * 0.12)
+        label_gap = 2.0
+        label_x = ox_abs + size / 2.0
+        label_y = oy - label_gap
+
+        with self.saved_context():
+            base_y = -(self.edges["s"].startWidth() + self.burn)
+            self.moveTo(0, base_y)
+            if mirrored:
+                # Keep mirrored-side text readable by canceling local x-mirroring.
+                self.ctx.translate(label_x, 0)
+                self.ctx.scale(-1, 1)
+                self.ctx.translate(-label_x, 0)
+            self.text(
+                label,
+                x=label_x,
+                y=label_y,
+                align="top center",
+                fontsize=label_fontsize,
+                color=Color.ETCHING,
+            )
 
     def sideBottomFeatures(self, panel_w, panel_h, mirrored=False):
         """Apply side-panel bottom-edge features."""
