@@ -78,6 +78,18 @@ class Trailer(Boxes):
         lid_aruco_group.add_argument("--LidArucoOffsetX", action="store", type=float, default=0.0, help="marker X offset from lid center in mm")
         lid_aruco_group.add_argument("--LidArucoOffsetY", action="store", type=float, default=0.0, help="marker Y offset from lid center in mm")
 
+        lid_logo_group = self.argparser.add_argument_group("Front Lid Logos")
+        lid_logo_group.add_argument("--AddFrontLidLogos", action="store", type=boolarg, default=True, help="add stacked logos on the front split-lid half")
+        lid_logo_group.add_argument("--FrontLidLogoSvgPath1", action="store", type=str, default="/mnt/c/Users/schoennagel/Pictures/logo-ivi.svg", help="path to SVG logo for front lid")
+        lid_logo_group.add_argument("--FrontLidLogoSvgPath2", action="store", type=str, default="/mnt/c/Users/schoennagel/Pictures/logo-swarmlab-flat3.svg", help="path to SVG logo for front lid")
+        lid_logo_group.add_argument("--FrontLidLogoSvgPath3", action="store", type=str, default="/mnt/c/Users/schoennagel/Pictures/logo-ovgu-FIN.svg", help="path to SVG logo for front lid")
+        lid_logo_group.add_argument("--FrontLidLogoCount", action="store", type=int, default=3, help="number of stacked logos on front lid")
+        lid_logo_group.add_argument("--FrontLidLogoMaxWidth", action="store", type=float, default=80.0, help="max width of each front-lid logo in mm")
+        lid_logo_group.add_argument("--FrontLidLogoMaxHeight", action="store", type=float, default=25.0, help="max height of each front-lid logo in mm")
+        lid_logo_group.add_argument("--FrontLidLogoStackHeight", action="store", type=float, default=90.0, help="total vertical stack height used by front-lid logos in mm")
+        lid_logo_group.add_argument("--FrontLidLogoOffsetX", action="store", type=float, default=0.0, help="X offset of stacked logos from front-lid center in mm")
+        lid_logo_group.add_argument("--FrontLidLogoOffsetY", action="store", type=float, default=0.0, help="Y offset of stacked logos from front-lid center in mm")
+
         side_aruco_group = self.argparser.add_argument_group("Side ArUco")
         side_aruco_group.add_argument("--AddSideArucoEtching", action="store", type=boolarg, default=True, help="add an ArUco marker etching on both side panels")
         side_aruco_group.add_argument("--SideArucoId", action="store", type=int, default=0, help="numeric side ArUco marker id")
@@ -94,19 +106,21 @@ class Trailer(Boxes):
         side_aruco_group.add_argument("--SideArucoOffsetY", action="store", type=float, default=20.0, help="marker Y offset from side panel center in mm")
 
         side_logo_group = self.argparser.add_argument_group("Side Logo")
-        side_logo_group.add_argument("--AddSideLogoEtching", action="store", type=boolarg, default=False, help="add an SVG logo etching on both side panels")
+        side_logo_group.add_argument("--AddSideLogoEtching", action="store", type=boolarg, default=True, help="add an SVG logo etching on both side panels")
         side_logo_group.add_argument("--SideLogoSvgPath", action="store", type=str, default="/mnt/c/Users/schoennagel/Pictures/logo-ivi.svg", help="path to an SVG logo file")
         side_logo_group.add_argument("--SideLogoMaxWidth", action="store", type=float, default=70.0, help="max logo width in mm")
         side_logo_group.add_argument("--SideLogoMaxHeight", action="store", type=float, default=30.0, help="max logo height in mm")
         side_logo_group.add_argument("--SideLogoOffsetX", action="store", type=float, default=0.0, help="logo X offset from side panel center in mm")
         side_logo_group.add_argument("--SideLogoOffsetY", action="store", type=float, default=20.0, help="logo Y offset inside bottom zone in mm")
 
+
+
         # Hitch joint parameters
         hitch_group = self.argparser.add_argument_group("Hitch")
         hitch_group.add_argument("--AddHitchJoint", action="store", type=boolarg, default=True, help="add hitch joint features and parts")
         hitch_group.add_argument("--HitchLength", action="store", type=float, default=110.0, help="hitch connector length in mm. This is the distance from the front edge of the trailer to the center of the hitch pin hole.")
         hitch_group.add_argument("--HitchWidth", action="store", type=float, default=13.0, help="hitch connector width in mm")
-        hitch_group.add_argument("--HitchPinDiameter", action="store", type=float, default=7.5, help="rear wall pin-hole diameter in mm")
+        hitch_group.add_argument("--HitchPinDiameter", action="store", type=float, default=7.2, help="rear wall pin-hole diameter in mm")
         hitch_group.add_argument("--RearHitchPinThickness", action="store", type=float, default=5.0, help="thickness of the rear hitch pin in mm. This is the part that rises from the back wall and fits into the hole on the hitch tongue.")
         hitch_group.add_argument("--RearHitchClearance", action="store", type=float, default=9.0, help="extra clearance for inserting the hitch tongue onto the pin in the rear wall in mm")
         hitch_group.add_argument("--RearHitchPinHeight", action="store", type=float, default=8.0, help="height of the rear hitch pin rising from the back wall in mm")
@@ -432,6 +446,45 @@ class Trailer(Boxes):
                 color=Color.ETCHING,
             )
 
+    def frontLidStackedLogos(self, lid_w, lid_h):
+        """Etch stacked logos on the front split-lid half (the half without ArUco)."""
+        if not self.AddFrontLidLogos:
+            return
+        if not self.FrontLidLogoSvgPath1:
+            return
+
+        count = max(1, int(self.FrontLidLogoCount))
+        stack_h = min(float(self.FrontLidLogoStackHeight), max(lid_h - 2.0, 0.0))
+        if stack_h <= 0.0:
+            return
+
+        cell_h = stack_h / count
+        logo_w = min(float(self.FrontLidLogoMaxWidth), max(lid_w - 2.0, 0.0))
+        logo_h = min(float(self.FrontLidLogoMaxHeight), max(cell_h * 0.85, 0.0))
+        if logo_w <= 0.0 or logo_h <= 0.0:
+            return
+
+        center_x = lid_w / 2.0 + float(self.FrontLidLogoOffsetX)
+        stack_center_y = lid_h / 2.0 + float(self.FrontLidLogoOffsetY)
+        start_y = stack_center_y + 0.5 * stack_h - 0.5 * cell_h
+
+        logos = [self.FrontLidLogoSvgPath1, self.FrontLidLogoSvgPath2, self.FrontLidLogoSvgPath3]
+        for i in range(count):
+            center_y = start_y - i * cell_h
+            slot_index = i % len(logos)
+            etch_svg_logo(
+                self,
+                lid_w,
+                lid_h,
+                logos[slot_index],
+                logo_w,
+                logo_h,
+                center_x,
+                center_y,
+                callback_edge_char="I",
+                mirrored=False,
+            )
+
     def hitchConnectorFeatures(self):
         """Add circular hole cutout to the hitch tongue."""
         tip_margin = 0
@@ -529,6 +582,7 @@ class Trailer(Boxes):
                     front_len,
                     b,
                     ["I", "e", "J", "e"],
+                    callback=[lambda: self.frontLidStackedLogos(front_len, b), None, None, None],
                     move="right",
                     label="Front Lid",
                 )
