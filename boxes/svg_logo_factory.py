@@ -224,16 +224,19 @@ def _svg_bbox(paths):
 
 def _draw_svg_paths(ctx, paths):
     break_eps = 1e-6
+    close_eps = 1e-4
     for p, _fill, matrix in paths:
         if not p:
             continue
         current = None
+        subpath_start = None
         for segment in p:
             start = _apply_matrix(segment.start, matrix)
             if current is None or abs(start - current) > break_eps:
                 # Path data may contain multiple subpaths. Start each one explicitly
                 # to avoid connecting letters with unwanted bridge lines.
                 ctx.move_to(start.real, start.imag)
+                subpath_start = start
             if isinstance(segment, Line):
                 end = _apply_matrix(segment.end, matrix)
                 ctx.line_to(end.real, end.imag)
@@ -252,12 +255,17 @@ def _draw_svg_paths(ctx, paths):
             elif isinstance(segment, Arc):
                 # Approximate arcs with short line segments.
                 samples = 24
+                end = _apply_matrix(segment.end, matrix)
                 for i in range(1, samples + 1):
                     pt = _apply_matrix(segment.point(i / samples), matrix)
                     ctx.line_to(pt.real, pt.imag)
             else:
                 end = _apply_matrix(segment.end, matrix)
                 ctx.line_to(end.real, end.imag)
+
+            # Explicitly close contours so laser/CAM hatch fill can detect them.
+            if subpath_start is not None and abs(end - subpath_start) <= close_eps:
+                ctx.line_to(subpath_start.real, subpath_start.imag)
             current = end
 
 
@@ -283,7 +291,7 @@ def _path_to_polygon(path, matrix):
         return None
     start = _apply_matrix(path[0].start, matrix)
     end = _apply_matrix(path[-1].end, matrix)
-    if abs(end - start) > 1e-6:
+    if abs(end - start) > 1e-4:
         return None
 
     pts = [start]
@@ -303,6 +311,27 @@ def _path_to_polygon(path, matrix):
         if poly.is_empty:
             return None
     return poly
+
+
+def _combine_polygons_evenodd(polygons):
+    """Combine rings using even-odd semantics to preserve inner holes.
+
+    Many logos/text outlines are exported as multiple same-color rings where
+    counters (letters O, B, A, etc.) are represented by nested paths. A plain union can
+    fill these holes. Symmetric-difference composition preserves them.
+    """
+    try:
+        from shapely.geometry import GeometryCollection
+    except Exception:
+        return None
+
+    if not polygons:
+        return GeometryCollection()
+
+    geom = polygons[0]
+    for poly in polygons[1:]:
+        geom = geom.symmetric_difference(poly)
+    return geom
 
 
 def _path_bounds(path, matrix):
@@ -336,12 +365,13 @@ def _build_knockout_geometry(paths):
     if not nonwhite_polys:
         return None
 
-    base = unary_union(nonwhite_polys)
+    base = _combine_polygons_evenodd(nonwhite_polys)
     if white_polys:
+        white_geom = _combine_polygons_evenodd(white_polys)
         cutters = []
         keep_outside = []
         base_for_test = base.buffer(1e-6)
-        for w in white_polys:
+        for w in getattr(white_geom, "geoms", [white_geom]):
             # Classify by overlap with base area, not by strict set difference.
             # This is robust against tiny numeric gaps from curve sampling.
             if base_for_test.intersects(w):
@@ -393,6 +423,7 @@ def etch_svg_logo(
     offset_y: float = 0.0,
     callback_edge_char: str | None = None,
     mirrored: bool = False,
+    apply_white_knockout: bool = True,
 ) -> None:
     if not svg_path:
         return
@@ -414,8 +445,13 @@ def etch_svg_logo(
     has_white = any(_is_white_fill(fill) for _p, fill, _m in paths)
     has_nonwhite = any(_is_explicit_nonwhite_fill(fill) for _p, fill, _m in paths)
     knockout_geom = None
-    draw_paths = [(p, f, m) for p, f, m in paths if _is_visible_nonwhite_fill(f) or _is_white_fill(f)]
-    if has_white and has_nonwhite:
+    if apply_white_knockout:
+        draw_paths = [(p, f, m) for p, f, m in paths if _is_visible_nonwhite_fill(f) or _is_white_fill(f)]
+    else:
+        # Force solid etch behavior by ignoring white knockout paths.
+        draw_paths = [(p, f, m) for p, f, m in paths if _is_visible_nonwhite_fill(f) and not _is_white_fill(f)]
+
+    if apply_white_knockout and has_white and has_nonwhite:
         knockout_geom = _build_knockout_geometry(paths)
 
     xmin, xmax, ymin, ymax = _svg_bbox(draw_paths)
