@@ -89,6 +89,7 @@ class Trailer(Boxes):
         lid_logo_group.add_argument("--FrontLidLogoStackHeight", action="store", type=float, default=90.0, help="total vertical stack height used by front-lid logos in mm")
         lid_logo_group.add_argument("--FrontLidLogoOffsetX", action="store", type=float, default=0.0, help="X offset of stacked logos from front-lid center in mm")
         lid_logo_group.add_argument("--FrontLidLogoOffsetY", action="store", type=float, default=0.0, help="Y offset of stacked logos from front-lid center in mm")
+        lid_logo_group.add_argument("--FrontLidLogo2SolidEtch", action="store", type=boolarg, default=True, help="for logo slot 2: ignore white knockouts and etch as solid to avoid halo rings")
 
         side_aruco_group = self.argparser.add_argument_group("Side ArUco")
         side_aruco_group.add_argument("--AddSideArucoEtching", action="store", type=boolarg, default=True, help="add an ArUco marker etching on both side panels")
@@ -120,7 +121,7 @@ class Trailer(Boxes):
         hitch_group.add_argument("--AddHitchJoint", action="store", type=boolarg, default=True, help="add hitch joint features and parts")
         hitch_group.add_argument("--HitchLength", action="store", type=float, default=110.0, help="hitch connector length in mm. This is the distance from the front edge of the trailer to the center of the hitch pin hole.")
         hitch_group.add_argument("--HitchWidth", action="store", type=float, default=13.0, help="hitch connector width in mm")
-        hitch_group.add_argument("--HitchPinDiameter", action="store", type=float, default=7.2, help="rear wall pin-hole diameter in mm")
+        hitch_group.add_argument("--HitchPinDiameter", action="store", type=float, default=7.3, help="rear wall pin-hole diameter in mm")
         hitch_group.add_argument("--RearHitchPinThickness", action="store", type=float, default=5.0, help="thickness of the rear hitch pin in mm. This is the part that rises from the back wall and fits into the hole on the hitch tongue.")
         hitch_group.add_argument("--RearHitchClearance", action="store", type=float, default=9.0, help="extra clearance for inserting the hitch tongue onto the pin in the rear wall in mm")
         hitch_group.add_argument("--RearHitchPinHeight", action="store", type=float, default=8.0, help="height of the rear hitch pin rising from the back wall in mm")
@@ -510,6 +511,7 @@ class Trailer(Boxes):
                 center_y,
                 callback_edge_char="I",
                 mirrored=False,
+                apply_white_knockout=not (slot_index == 1 and self.FrontLidLogo2SolidEtch),
             )
 
     def hitchConnectorFeatures(self):
