@@ -1,4 +1,5 @@
 affine>=2.0
+ezdxf>=1.1.4
 markdown
 numpy
 opencv-contrib-python-headless

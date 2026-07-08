@@ -18,5 +18,6 @@ services:
       - /app/scripts
       - ./:/app
       - /mnt/c/Users/schoennagel/Pictures:/mnt/c/Users/schoennagel/Pictures:ro
+      - /mnt/c/Users/schoennagel/ownCloud/Documents/Science/Trailer-Hardware:/mnt/c/Users/schoennagel/ownCloud/Documents/Science/Trailer-Hardware:ro
     ports:
       - 4455:8000
