@@ -42,7 +42,7 @@ All mating connections use finger joints."""
     def __init__(self) -> None:
         Boxes.__init__(self)
         self.addSettingsArgs(edges.FingerJointSettings, bottom_lip=0.0, play=0.05)
-        self.buildArgParser(x=217, y=138, h=135, outside=False)
+        self.buildArgParser(x=217, y=138, h=130, outside=False)
 
         self.argparser.add_argument(
             "--CornerLength",
@@ -168,21 +168,21 @@ All mating connections use finger joints."""
             help="inset from corner to etch center for corner markers in mm",
         )
         self.argparser.add_argument(
-            "--CornerEtchCircleOffsetX",
+            "--WheelOffsetX",
             action="store",
             type=float,
             default=30.0,
             help="x offset from the lower angled corner to circle center in mm",
         )
         self.argparser.add_argument(
-            "--CornerEtchCircleOffsetY",
+            "--WheelOffsetY",
             action="store",
             type=float,
-            default=-30.0,
+            default=-45.0,
             help="y offset from the lower angled corner to circle center in mm",
         )
         self.argparser.add_argument(
-            "--CornerEtchCircleDiameter",
+            "--WheelDiameter",
             action="store",
             type=float,
             default=65.0,
@@ -241,7 +241,7 @@ All mating connections use finger joints."""
             "--SideRectEtch2Width",
             action="store",
             type=float,
-            default=150.0,
+            default=130.0,
             help="width of second rectangular etch on side walls in mm (0 disables)",
         )
         self.argparser.add_argument(
@@ -255,7 +255,7 @@ All mating connections use finger joints."""
             "--SideRectEtch2OffsetX",
             action="store",
             type=float,
-            default=162.5,
+            default=152.5,
             help="x offset from side-profile start corner to second rectangle center in mm (world frame)",
         )
         self.argparser.add_argument(
@@ -264,6 +264,13 @@ All mating connections use finger joints."""
             type=float,
             default=35.0,
             help="y offset from side-profile start corner to second rectangle center in mm (world frame)",
+        )
+        self.argparser.add_argument(
+            "--SideEtchBorderAllowance",
+            action="store",
+            type=float,
+            default=3.5,
+            help="extra border allowance for side etches in mm to include finger tabs and gaps",
         )
         self.argparser.add_argument(
             "--TopRectEtchWidth",
@@ -297,7 +304,7 @@ All mating connections use finger joints."""
             "--AngledFaceRectEtchWidth",
             action="store",
             type=float,
-            default=80.0,
+            default=70.0,
             help="width of second rectangular etch on angled face in mm (0 disables)",
         )
         self.argparser.add_argument(
@@ -311,7 +318,7 @@ All mating connections use finger joints."""
             "--AngledFaceRectEtchOffsetX",
             action="store",
             type=float,
-            default=45.0,
+            default=40.0,
             help="x offset from angled-face start corner to second rectangle center in mm (world frame)",
         )
         self.argparser.add_argument(
@@ -379,6 +386,213 @@ All mating connections use finger joints."""
             "diagonal": diagonal,
             "corner_angle": corner_angle,
         }
+
+    def _cache_side_profile_geometry(self, side_borders):
+        """Cache side profile vertices and segment headings in piece-local coordinates."""
+        vertices = []
+        headings = []
+        x = 0.0
+        y = 0.0
+        a = 0.0
+
+        for i in range(0, len(side_borders), 2):
+            length = float(side_borders[i])
+            turn = float(side_borders[i + 1])
+            vertices.append((x, y))
+            headings.append(a)
+            x += length * math.cos(math.radians(a))
+            y += length * math.sin(math.radians(a))
+            a = (a + turn) % 360.0
+
+        self._side_profile_vertices = vertices
+        self._side_profile_headings = headings
+
+    def _callback_local_to_piece(self, cb_index, lx, ly):
+        """Transform callback-local coordinates back to side-piece coordinates."""
+        if not hasattr(self, "_side_profile_vertices") or cb_index >= len(self._side_profile_vertices):
+            return None
+
+        cx, cy = self._side_profile_vertices[cb_index]
+        heading = math.radians(self._side_profile_headings[cb_index])
+        # Callbacks are invoked at y=self.burn relative to the local segment frame.
+        x = cx + lx * math.cos(heading) - (ly + self.burn) * math.sin(heading)
+        y = cy + lx * math.sin(heading) + (ly + self.burn) * math.cos(heading)
+        return x, y
+
+    @staticmethod
+    def _point_in_polygon(px, py, polygon):
+        inside = False
+        n = len(polygon)
+        if n < 3:
+            return False
+        j = n - 1
+        for i in range(n):
+            xi, yi = polygon[i]
+            xj, yj = polygon[j]
+            intersects = ((yi > py) != (yj > py)) and (
+                px < (xj - xi) * (py - yi) / ((yj - yi) if abs(yj - yi) > 1e-12 else 1e-12) + xi
+            )
+            if intersects:
+                inside = not inside
+            j = i
+        return inside
+
+    @staticmethod
+    def _distance_point_to_segment(px, py, ax, ay, bx, by):
+        vx = bx - ax
+        vy = by - ay
+        wx = px - ax
+        wy = py - ay
+        vv = vx * vx + vy * vy
+        if vv <= 1e-12:
+            return math.hypot(px - ax, py - ay)
+        t = max(0.0, min(1.0, (wx * vx + wy * vy) / vv))
+        qx = ax + t * vx
+        qy = ay + t * vy
+        return math.hypot(px - qx, py - qy)
+
+    def _side_border_clearance(self, px, py):
+        """Signed distance from point to side border in piece coordinates."""
+        poly = getattr(self, "_side_profile_vertices", None)
+        if not poly or len(poly) < 3:
+            return None
+
+        inside = self._point_in_polygon(px, py, poly)
+        min_dist = 1e12
+        for i in range(len(poly)):
+            ax, ay = poly[i]
+            bx, by = poly[(i + 1) % len(poly)]
+            d = self._distance_point_to_segment(px, py, ax, ay, bx, by)
+            if d < min_dist:
+                min_dist = d
+        return min_dist if inside else -min_dist
+
+    def _point_in_side_etch_area(self, px, py):
+        """Accept base polygon plus a border band for finger-joint region."""
+        clearance = self._side_border_clearance(px, py)
+        if clearance is None:
+            return False
+        allowance = max(0.0, float(self.SideEtchBorderAllowance))
+        return clearance >= -allowance
+
+    def _draw_clipped_circle_outline(self, cb_index, cx_local, cy_local, diameter, color=Color.ETCHING):
+        """Draw only the circle outline segments that lie inside the side polygon."""
+        if diameter <= 0:
+            return
+
+        poly = getattr(self, "_side_profile_vertices", None)
+        if not poly or len(poly) < 3:
+            self.hole(cx_local, cy_local, d=diameter, color=color)
+            return
+
+        r = 0.5 * diameter
+        steps = max(120, int(2.0 * math.pi * r / 1.5))
+        points = []
+        inside_flags = []
+
+        for i in range(steps + 1):
+            theta = (2.0 * math.pi * i) / steps
+            lx = cx_local + r * math.cos(theta)
+            ly = cy_local + r * math.sin(theta)
+            piece_pt = self._callback_local_to_piece(cb_index, lx, ly)
+            if piece_pt is None:
+                return
+            inside = self._point_in_side_etch_area(piece_pt[0], piece_pt[1])
+            points.append((lx, ly))
+            inside_flags.append(inside)
+
+        with self.saved_context():
+            self.ctx.stroke()
+            self.set_source_color(color)
+            drawing = False
+            for i in range(steps + 1):
+                if inside_flags[i]:
+                    if not drawing:
+                        self.ctx.move_to(points[i][0], points[i][1])
+                        drawing = True
+                    else:
+                        self.ctx.line_to(points[i][0], points[i][1])
+                else:
+                    drawing = False
+            self.ctx.stroke()
+
+    def _draw_clipped_circle_pair(self, cb_index, cx_local, cy_local, d_outer, d_inner, color=Color.ETCHING):
+        """Draw closed clipped ring contours by connecting clipped outer/inner circle arcs."""
+        if d_outer <= 0 or d_inner <= 0:
+            return
+        if d_inner >= d_outer:
+            self._draw_clipped_circle_outline(cb_index, cx_local, cy_local, d_outer, color=color)
+            return
+
+        poly = getattr(self, "_side_profile_vertices", None)
+        if not poly or len(poly) < 3:
+            self.hole(cx_local, cy_local, d=d_outer, color=color)
+            self.hole(cx_local, cy_local, d=d_inner, color=color)
+            return
+
+        ro = 0.5 * d_outer
+        ri = 0.5 * d_inner
+        steps = max(180, int(2.0 * math.pi * ro / 1.2))
+
+        outer_pts = []
+        inner_pts = []
+        valid = []
+
+        for i in range(steps):
+            theta = (2.0 * math.pi * i) / steps
+            ox = cx_local + ro * math.cos(theta)
+            oy = cy_local + ro * math.sin(theta)
+            ix = cx_local + ri * math.cos(theta)
+            iy = cy_local + ri * math.sin(theta)
+
+            op = self._callback_local_to_piece(cb_index, ox, oy)
+            ip = self._callback_local_to_piece(cb_index, ix, iy)
+            if op is None or ip is None:
+                return
+
+            inside = self._point_in_side_etch_area(op[0], op[1]) and self._point_in_side_etch_area(ip[0], ip[1])
+            outer_pts.append((ox, oy))
+            inner_pts.append((ix, iy))
+            valid.append(inside)
+
+        if not any(valid):
+            return
+
+        runs = []
+        if all(valid):
+            runs.append((0, steps - 1))
+        else:
+            run_start = None
+            for i in range(steps):
+                prev_ok = valid[i - 1]
+                cur_ok = valid[i]
+                next_ok = valid[(i + 1) % steps]
+                if cur_ok and not prev_ok:
+                    run_start = i
+                if cur_ok and not next_ok and run_start is not None:
+                    runs.append((run_start, i))
+                    run_start = None
+
+        with self.saved_context():
+            self.ctx.stroke()
+            self.set_source_color(color)
+            for start, end in runs:
+                idx = start
+                self.ctx.move_to(outer_pts[idx][0], outer_pts[idx][1])
+
+                while idx != end:
+                    idx = (idx + 1) % steps
+                    self.ctx.line_to(outer_pts[idx][0], outer_pts[idx][1])
+
+                self.ctx.line_to(inner_pts[end][0], inner_pts[end][1])
+
+                while idx != start:
+                    idx = (idx - 1) % steps
+                    self.ctx.line_to(inner_pts[idx][0], inner_pts[idx][1])
+
+                self.ctx.line_to(outer_pts[start][0], outer_pts[start][1])
+
+            self.ctx.stroke()
 
     def _extra_plate_slots(self):
         g = self._geom
@@ -481,22 +695,26 @@ All mating connections use finger joints."""
         inv = ~m
         return inv * (ox + float(dx), oy + float(dy))
 
-    def _etch_circle_beneath_angled_edge(self):
-        self._etch_circle_beneath_angled_edge_mirrored(False)
-
-    def _etch_circle_beneath_angled_edge_mirrored(self, mirrored=False):
-        d = float(self.CornerEtchCircleDiameter)
+    def _etch_circle_beneath_angled_edge(self, cb_index, mirrored=False):
+        d = float(self.WheelDiameter)
         if d <= 0:
             return
-        x = float(self.CornerEtchCircleOffsetX)
+        x = float(self.WheelOffsetX)
         if mirrored:
             x = -x
-        y = float(self.CornerEtchCircleOffsetY)
+        y = float(self.WheelOffsetY)
         lx, ly = self._world_offset_to_local(x, y)
-        self.hole(lx, ly, d=d, color=Color.ETCHING)
-        self.hole(lx, ly, d=d-1, color=Color.ETCHING)
-        self.hole(lx, ly, d=d-15, color=Color.ETCHING)
-        self.hole(lx, ly, d=d-16, color=Color.ETCHING)
+
+        if d > 1.0:
+            self._draw_clipped_circle_pair(cb_index, lx, ly, d, d - 1, color=Color.ETCHING)
+        else:
+            self._draw_clipped_circle_outline(cb_index, lx, ly, d, color=Color.ETCHING)
+
+        if d > 15.0:
+            if d > 16.0:
+                self._draw_clipped_circle_pair(cb_index, lx, ly, d - 15, d - 16, color=Color.ETCHING)
+            else:
+                self._draw_clipped_circle_outline(cb_index, lx, ly, d - 15, color=Color.ETCHING)
 
     def _etch_polygon_at_angled_corner(self):
         self._etch_polygon_at_angled_corner_mirrored(False)
@@ -657,15 +875,17 @@ All mating connections use finger joints."""
             upper_angled_corner_idx = 4
             lower_angled_corner_idx = 5
 
+        self._cache_side_profile_geometry(side_borders)
+
         side_callbacks_left = [None] * (len(side_borders) // 2)
         side_callbacks_left[0] = self._side_base_features_left
         side_callbacks_left[upper_angled_corner_idx] = self._etch_polygon_at_angled_corner
-        side_callbacks_left[lower_angled_corner_idx] = self._etch_circle_beneath_angled_edge
+        side_callbacks_left[lower_angled_corner_idx] = lambda: self._etch_circle_beneath_angled_edge(lower_angled_corner_idx, False)
 
         side_callbacks_right = [None] * (len(side_borders) // 2)
         side_callbacks_right[0] = self._side_base_features_right
         side_callbacks_right[upper_angled_corner_idx] = lambda: self._etch_polygon_at_angled_corner_mirrored(True)
-        side_callbacks_right[lower_angled_corner_idx] = lambda: self._etch_circle_beneath_angled_edge_mirrored(True)
+        side_callbacks_right[lower_angled_corner_idx] = lambda: self._etch_circle_beneath_angled_edge(lower_angled_corner_idx, True)
 
         self.polygonWall(
             side_borders,
