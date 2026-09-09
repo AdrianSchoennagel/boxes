@@ -99,7 +99,7 @@ All mating connections use finger joints."""
             "--TopScrewEdgeDistance",
             action="store",
             type=float,
-            default=5.0,
+            default=15.0,
             help="distance from selected clean edge to screw-hole center on top plate in mm",
         )
         self.argparser.add_argument(
@@ -118,10 +118,31 @@ All mating connections use finger joints."""
             help="which clean edge to measure TopScrewEdgeDistance from",
         )
         self.argparser.add_argument(
+            "--BottomPlateCutoutDepth",
+            action="store",
+            type=float,
+            default=20.0,
+            help="depth of the slot cutout from the e edge into the bottom plate in mm",
+        )
+        self.argparser.add_argument(
+            "--BottomPlateCutoutCenterOffsets",
+            action="store",
+            type=argparseSections,
+            default="-24:-12:12:24",
+            help="offsets along the clean edge from the plate center line in mm (example: -25:25)",
+        )
+        self.argparser.add_argument(
+            "--BottomPlateCutoutDiameter",
+            action="store",
+            type=float,
+            default=7.0,
+            help="slot width of the cutouts on the bottom plate in mm",
+        )
+        self.argparser.add_argument(
             "--InnerPlateScrewEdgeDistance",
             action="store",
             type=float,
-            default=15.0,
+            default=10.0,
             help="distance from selected clean edge to screw-hole center on inner plate in mm",
         )
         self.argparser.add_argument(
@@ -199,7 +220,7 @@ All mating connections use finger joints."""
             "--SideRectEtchHeight",
             action="store",
             type=float,
-            default=85.0,
+            default=100.0,
             help="height of rectangular etch on side walls in mm (0 disables)",
         )
         self.argparser.add_argument(
@@ -213,36 +234,92 @@ All mating connections use finger joints."""
             "--SideRectEtchOffsetY",
             action="store",
             type=float,
-            default=95.0,
+            default=87.5,
             help="y offset from side-profile start corner to rectangle center in mm (world frame)",
         )
         self.argparser.add_argument(
             "--SideRectEtch2Width",
             action="store",
             type=float,
-            default=0.0,
+            default=150.0,
             help="width of second rectangular etch on side walls in mm (0 disables)",
         )
         self.argparser.add_argument(
             "--SideRectEtch2Height",
             action="store",
             type=float,
-            default=0.0,
+            default=5.0,
             help="height of second rectangular etch on side walls in mm (0 disables)",
         )
         self.argparser.add_argument(
             "--SideRectEtch2OffsetX",
             action="store",
             type=float,
-            default=0.0,
+            default=162.5,
             help="x offset from side-profile start corner to second rectangle center in mm (world frame)",
         )
         self.argparser.add_argument(
             "--SideRectEtch2OffsetY",
             action="store",
             type=float,
-            default=0.0,
+            default=35.0,
             help="y offset from side-profile start corner to second rectangle center in mm (world frame)",
+        )
+        self.argparser.add_argument(
+            "--TopRectEtchWidth",
+            action="store",
+            type=float,
+            default=5.0,
+            help="width of second rectangular etch on top walls in mm (0 disables)",
+        )
+        self.argparser.add_argument(
+            "--TopRectEtchHeight",
+            action="store",
+            type=float,
+            default=144.0,
+            help="height of second rectangular etch on top walls in mm (0 disables)",
+        )
+        self.argparser.add_argument(
+            "--TopRectEtchOffsetX",
+            action="store",
+            type=float,
+            default=50.0,
+            help="x offset from top-profile start corner to second rectangle center in mm (world frame)",
+        )
+        self.argparser.add_argument(
+            "--TopRectEtchOffsetY",
+            action="store",
+            type=float,
+            default=69.0,
+            help="y offset from top-profile start corner to second rectangle center in mm (world frame)",
+        )
+        self.argparser.add_argument(
+            "--AngledFaceRectEtchWidth",
+            action="store",
+            type=float,
+            default=80.0,
+            help="width of second rectangular etch on angled face in mm (0 disables)",
+        )
+        self.argparser.add_argument(
+            "--AngledFaceRectEtchHeight",
+            action="store",
+            type=float,
+            default=130.0,
+            help="height of second rectangular etch on angled face in mm (0 disables)",
+        )
+        self.argparser.add_argument(
+            "--AngledFaceRectEtchOffsetX",
+            action="store",
+            type=float,
+            default=45.0,
+            help="x offset from angled-face start corner to second rectangle center in mm (world frame)",
+        )
+        self.argparser.add_argument(
+            "--AngledFaceRectEtchOffsetY",
+            action="store",
+            type=float,
+            default=69.0,
+            help="y offset from angled-face start corner to second rectangle center in mm (world frame)",
         )
 
         self.argparser.set_defaults(burn=0.075)
@@ -329,6 +406,13 @@ All mating connections use finger joints."""
             self.SideRectEtchOffsetY,
             mirrored,
         )
+        self._etch_side_rectangle_cfg(
+            float(self.SideRectEtchWidth)-1,
+            float(self.SideRectEtchHeight)-1,
+            self.SideRectEtchOffsetX,
+            self.SideRectEtchOffsetY,
+            mirrored,
+        )
 
     def _etch_side_rectangle2(self, mirrored=False):
         self._etch_side_rectangle_cfg(
@@ -336,6 +420,45 @@ All mating connections use finger joints."""
             float(self.SideRectEtch2Height),
             self.SideRectEtch2OffsetX,
             self.SideRectEtch2OffsetY,
+            mirrored,
+        )
+        self._etch_side_rectangle_cfg(
+            float(self.SideRectEtch2Width)-1,
+            float(self.SideRectEtch2Height)-1,
+            self.SideRectEtch2OffsetX,
+            self.SideRectEtch2OffsetY,
+            mirrored,
+        )
+
+    def _etch_top_rectangle(self, mirrored=False):
+        self._etch_side_rectangle_cfg(
+            float(self.TopRectEtchWidth),
+            float(self.TopRectEtchHeight),
+            self.TopRectEtchOffsetX,
+            self.TopRectEtchOffsetY,
+            mirrored,
+        )
+        self._etch_side_rectangle_cfg(
+            float(self.TopRectEtchWidth)-1,
+            float(self.TopRectEtchHeight)-1,
+            self.TopRectEtchOffsetX,
+            self.TopRectEtchOffsetY,
+            mirrored,
+        )
+
+    def _angled_face_rect_etch(self, mirrored=False):
+        self._etch_side_rectangle_cfg(
+            float(self.AngledFaceRectEtchWidth),
+            float(self.AngledFaceRectEtchHeight),
+            self.AngledFaceRectEtchOffsetX,
+            self.AngledFaceRectEtchOffsetY,
+            mirrored,
+        )
+        self._etch_side_rectangle_cfg(
+            float(self.AngledFaceRectEtchWidth)-2,
+            float(self.AngledFaceRectEtchHeight)-2,
+            self.AngledFaceRectEtchOffsetX,
+            self.AngledFaceRectEtchOffsetY,
             mirrored,
         )
 
@@ -371,7 +494,9 @@ All mating connections use finger joints."""
         y = float(self.CornerEtchCircleOffsetY)
         lx, ly = self._world_offset_to_local(x, y)
         self.hole(lx, ly, d=d, color=Color.ETCHING)
+        self.hole(lx, ly, d=d-1, color=Color.ETCHING)
         self.hole(lx, ly, d=d-15, color=Color.ETCHING)
+        self.hole(lx, ly, d=d-16, color=Color.ETCHING)
 
     def _etch_polygon_at_angled_corner(self):
         self._etch_polygon_at_angled_corner_mirrored(False)
@@ -390,7 +515,7 @@ All mating connections use finger joints."""
         min_y, max_y = min(ys), max(ys)
         span_x = max(max_x - min_x, 1e-9)
         span_y = max(max_y - min_y, 1e-9)
-        scale = d / max(span_x, span_y)
+        scales = [d / max(span_x, span_y), (d-2) / max(span_x, span_y)]
         cx = 0.5 * (min_x + max_x)
         cy = 0.5 * (min_y + max_y)
 
@@ -399,22 +524,23 @@ All mating connections use finger joints."""
         if mirrored:
             anchor_x = -anchor_x
         anchor_y = float(self.CornerEtchPolygonOffsetY)
-        with self.saved_context():
-            self.ctx.stroke()
-            self.set_source_color(Color.ETCHING)
-            p0px = -float(points[0][0]) if mirrored else float(points[0][0])
-            w0x = anchor_x + (p0px - cx) * scale
-            w0y = anchor_y + (float(points[0][1]) - cy) * scale
-            p0x, p0y = self._world_offset_to_local(w0x, w0y)
-            self.ctx.move_to(p0x, p0y)
-            for px, py in points[1:]:
-                qpx = -float(px) if mirrored else float(px)
-                wqx = anchor_x + (qpx - cx) * scale
-                wqy = anchor_y + (float(py) - cy) * scale
-                qx, qy = self._world_offset_to_local(wqx, wqy)
-                self.ctx.line_to(qx, qy)
-            self.ctx.line_to(p0x, p0y)
-            self.ctx.stroke()
+        for scale in scales:
+            with self.saved_context():
+                self.ctx.stroke()
+                self.set_source_color(Color.ETCHING)
+                p0px = -float(points[0][0]) if mirrored else float(points[0][0])
+                w0x = anchor_x + (p0px - cx) * scale
+                w0y = anchor_y + (float(points[0][1]) - cy) * scale
+                p0x, p0y = self._world_offset_to_local(w0x, w0y)
+                self.ctx.move_to(p0x, p0y)
+                for px, py in points[1:]:
+                    qpx = -float(px) if mirrored else float(px)
+                    wqx = anchor_x + (qpx - cx) * scale
+                    wqy = anchor_y + (float(py) - cy) * scale
+                    qx, qy = self._world_offset_to_local(wqx, wqy)
+                    self.ctx.line_to(qx, qy)
+                self.ctx.line_to(p0x, p0y)
+                self.ctx.stroke()
 
     def _drill_plate_holes(self, plate_length, edge_distance, center_offsets, edge_side):
         d = float(self.ScrewHoleDiameter)
@@ -438,6 +564,10 @@ All mating connections use finger joints."""
             if min_y <= y <= max_y:
                 self.hole(x, y, d=d)
 
+    def _top_features(self):
+        self._top_plate_holes()
+        self._etch_top_rectangle()
+
     def _top_plate_holes(self):
         g = self._geom
         self._drill_plate_holes(
@@ -455,6 +585,25 @@ All mating connections use finger joints."""
             self.InnerPlateScrewCenterOffsets,
             self.InnerPlateScrewEdgeSide,
         )
+
+    def _bottom_plate_cutouts(self):
+        g = self._geom
+        slot_w = float(self.BottomPlateCutoutDiameter)
+        slot_d = float(self.BottomPlateCutoutDepth)
+        if slot_w <= 0 or slot_d <= 0:
+            return
+
+        slot_d = min(slot_d, g["bottom_length"])
+        depth = g["y"]
+        centerline = depth / 2.0
+        min_y = slot_w / 2.0
+        max_y = depth - slot_w / 2.0
+        slot_center_x = g["bottom_length"] - slot_d / 2.0
+        for off in self.BottomPlateCutoutCenterOffsets:
+            y = centerline + float(off)
+            if min_y <= y <= max_y:
+                # Slot opens on the e edge and extends inward by BottomPlateCutoutDepth.
+                self.rectangularHole(slot_center_x, y, slot_d, slot_w, r=0)
 
     def render(self):
         self._prepare_geometry()
@@ -543,7 +692,7 @@ All mating connections use finger joints."""
         self.rectangularWall(
             g["left_height"],
             g["y"],
-            "FfFf",
+            "FeFf",
             callback=[self._left_wall_plate_slot],
             move="right",
             label="left wall",
@@ -552,13 +701,13 @@ All mating connections use finger joints."""
         self.rectangularWall(
             g["top_length"],
             g["y"],
-            "FeFf",
-            callback=[self._top_plate_holes],
+            "FeFe",
+            callback=[self._top_features],
             move="right",
             label="top",
         )
-        self.rectangularWall(g["diagonal"], g["y"], "FFFF", move="right", label="angled face")
-        self.rectangularWall(g["bottom_length"], g["y"], "FeFF", move="right", label="partial bottom")
+        self.rectangularWall(g["diagonal"], g["y"], "FeFe", callback=[self._angled_face_rect_etch], move="right", label="angled face")
+        self.rectangularWall(g["bottom_length"], g["y"], "FeFF", callback=[self._bottom_plate_cutouts], move="right", label="partial bottom")
         self.rectangularWall(
             g["bottom_length"],
             g["y"],
